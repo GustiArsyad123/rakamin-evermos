@@ -20,20 +20,10 @@ Base URLs when running locally via Docker Compose:
   - Body (JSON): { "email": string, "password": string }
   - Response: { "token": string }
 
-- GET /api/v1/auth/users
-
-  - Headers: `Authorization: Bearer <token>`
-  - Response: { "data": [ { "id": int, "name": string, ... }, ... ] }
-
-- GET /api/v1/auth/users/:id
-
-  - Headers: `Authorization: Bearer <token>`
-  - Response: { "id": int, "name": string, ... }
-
 - POST /api/v1/auth/forgot-password
 
   - Body (JSON): { "email": string }
-  - Response: { "reset_token": string } (development only — token is returned; in production this would be emailed)
+  - Response: { "reset_token": string, "expires_in": 3600 } (development only — token is returned; in production this would be emailed)
 
 - POST /api/v1/auth/reset-password
 
@@ -43,8 +33,20 @@ Base URLs when running locally via Docker Compose:
 - POST /api/v1/auth/sso/google
 
   - Body (JSON): { "id_token": string }
-  - Response: { "token": string }
+  - Response: { "token": string, "expires_in": 3600 }
   - Notes: Accepts a Google ID token (JWT). In this development setup the server validates the token via `https://oauth2.googleapis.com/tokeninfo?id_token=<token>` and will create a new user automatically if the email does not exist. In production, verify audience (`aud`) against your Google OAuth Client ID and send the ID token to the backend securely.
+
+- GET /api/v1/auth/users
+
+  - Headers: `Authorization: Bearer <admin-token>`
+  - Query params: `page` (int, default 1), `limit` (int, default 10, max 100), `search` (string, optional, filters name or email)
+  - Response: { "data": [...], "pagination": { "page": int, "limit": int, "total": int } }
+  - Notes: Admin-only
+
+- GET /api/v1/users/:id
+
+  - Headers: `Authorization: Bearer <token>`
+  - Response: user object (owner or admin only)
 
 2. Product
 
@@ -63,25 +65,6 @@ Base URLs when running locally via Docker Compose:
 
 - GET /api/v1/products/:id
   - Response: product object
-
-3. Transaction
-
-- POST /api/v1/transactions
-
-  - Headers: `Authorization: Bearer <token>`
-  - Body (JSON): { "items": [ { "product_id": int, "quantity": int }, ... ] }
-  - Behavior: all items must be from the same store; creates `transactions` and `product_logs`, decrements product stock atomically.
-  - Response: { "id": <transaction_id> }
-
-- GET /api/v1/transactions
-
-  - Headers: `Authorization: Bearer <token>`
-  - Query params: `page`, `limit`
-  - Response: list of user's transactions (paginated)
-
-- GET /api/v1/transactions/:id
-  - Headers: `Authorization: Bearer <token>`
-  - Response: { "transaction": {...}, "logs": [...] }
 
 4. Category
 
@@ -113,6 +96,25 @@ Base URLs when running locally via Docker Compose:
   - Headers: `Authorization: Bearer <admin-token>`
   - Response: 204 No Content
   - Notes: Admin-only
+
+3. Transaction
+
+- POST /api/v1/transactions
+
+  - Headers: `Authorization: Bearer <token>`
+  - Body (JSON): { "items": [ { "product_id": int, "quantity": int }, ... ] }
+  - Behavior: all items must be from the same store; creates `transactions` and `product_logs`, decrements product stock atomically.
+  - Response: { "id": <transaction_id> }
+
+- GET /api/v1/transactions
+
+  - Headers: `Authorization: Bearer <token>`
+  - Query params: `page`, `limit`
+  - Response: list of user's transactions (paginated)
+
+- GET /api/v1/transactions/:id
+  - Headers: `Authorization: Bearer <token>`
+  - Response: { "transaction": {...}, "logs": [...] }
 
 Notes
 

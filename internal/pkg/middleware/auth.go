@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strings"
 
@@ -21,13 +20,12 @@ func JWTAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if auth == "" || !strings.HasPrefix(auth, "Bearer ") {
-			http.Error(w, "unauthorized: missing or malformed authorization header", http.StatusUnauthorized)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		tok := strings.TrimPrefix(auth, "Bearer ")
 		uid, role, err := jwtpkg.ParseToken(tok)
 		if err != nil {
-			log.Printf("JWTAuth: failed to parse token: %v", err) // Add logging for easier debugging
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}

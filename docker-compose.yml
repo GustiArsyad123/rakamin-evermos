@@ -1,49 +1,78 @@
 services:
   db:
     image: mysql:8.0
-    env_file: .env
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_DATABASE}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: example
+      MYSQL_DATABASE: ecommerce
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
     # map container 3306 to host 3307 to avoid conflicts with local MySQL
     ports:
-      - "${DB_PORT}:3306"
+      - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
       - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u$$MYSQL_USER",
+          "-p$$MYSQL_PASSWORD",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   auth:
-    env_file: .env
     build:
       context: .
       dockerfile: cmd/auth/Dockerfile
+    environment:
+      DB_HOST: db
+      DB_USER: user
+      DB_PASS: password
+      DB_NAME: ecommerce
     ports:
       - "8080:8080"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   product:
-    env_file: .env
     build:
       context: .
       dockerfile: cmd/product/Dockerfile
+    environment:
+      DB_HOST: db
+      DB_USER: user
+      DB_PASS: password
+      DB_NAME: ecommerce
     ports:
       - "8081:8081"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   transaction:
-    env_file: .env
     build:
       context: .
       dockerfile: cmd/transaction/Dockerfile
+    environment:
+      DB_HOST: db
+      DB_USER: user
+      DB_PASS: password
+      DB_NAME: ecommerce
     ports:
       - "8082:8082"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
 volumes:
   db_data:
