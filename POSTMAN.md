@@ -20,6 +20,16 @@ Base URLs when running locally via Docker Compose:
   - Body (JSON): { "email": string, "password": string }
   - Response: { "token": string }
 
+- GET /api/v1/auth/users
+
+  - Headers: `Authorization: Bearer <token>`
+  - Response: { "data": [ { "id": int, "name": string, ... }, ... ] }
+
+- GET /api/v1/auth/users/:id
+
+  - Headers: `Authorization: Bearer <token>`
+  - Response: { "id": int, "name": string, ... }
+
 - POST /api/v1/auth/forgot-password
 
   - Body (JSON): { "email": string }

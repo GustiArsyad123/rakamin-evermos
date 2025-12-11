@@ -19,19 +19,21 @@ type Usecase interface {
 	ForgotPassword(email string) (string, error)
 	ResetPassword(token, newPassword string) error
 	SSOLogin(idToken string) (string, error)
+	GetAllUsers() ([]*User, error)
+	GetUserByID(id int64) (*User, error)
 }
 
 type authUsecase struct {
-	repo Repository
+	repo *Repository
 }
 
-func NewUsecase(r Repository) Usecase {
+func NewUsecase(r *Repository) Usecase {
 	return &authUsecase{repo: r}
 }
 
 func (u *authUsecase) Register(user *models.User) (string, error) {
 	// uniqueness checks
-	existing, _ := u.repo.GetUserByEmail(user.Email)
+	existing, _, _ := u.repo.GetUserByEmail(user.Email)
 	if existing != nil {
 		return "", errors.New("email already registered")
 	}
@@ -41,7 +43,7 @@ func (u *authUsecase) Register(user *models.User) (string, error) {
 		return "", err
 	}
 	user.Password = string(h)
-	id, err := u.repo.CreateUser(user)
+	id, err := u.repo.CreateUser(user.Name, user.Email, user.Phone, user.Password)
 	if err != nil {
 		return "", err
 	}
@@ -53,11 +55,11 @@ func (u *authUsecase) Register(user *models.User) (string, error) {
 }
 
 func (u *authUsecase) Login(email, password string) (string, error) {
-	user, err := u.repo.GetUserByEmail(email)
+	user, passwordHash, err := u.repo.GetUserByEmail(email)
 	if err != nil || user == nil {
 		return "", errors.New("invalid credentials")
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)); err != nil {
 		return "", errors.New("invalid credentials")
 	}
 	token, err := jwtpkg.GenerateToken(user.ID, user.Role)
@@ -68,7 +70,7 @@ func (u *authUsecase) Login(email, password string) (string, error) {
 }
 
 func (u *authUsecase) ForgotPassword(email string) (string, error) {
-	user, err := u.repo.GetUserByEmail(email)
+	user, _, err := u.repo.GetUserByEmail(email)
 	if err != nil || user == nil {
 		return "", errors.New("user not found")
 	}
@@ -125,7 +127,7 @@ func (u *authUsecase) SSOLogin(idToken string) (string, error) {
 	}
 
 	// Try to find existing user
-	user, err := u.repo.GetUserByEmail(info.Email)
+	user, _, err := u.repo.GetUserByEmail(info.Email)
 	if err != nil {
 		return "", err
 	}
@@ -149,14 +151,22 @@ func (u *authUsecase) SSOLogin(idToken string) (string, error) {
 		Email:    info.Email,
 		Password: string(h),
 		Role:     "user",
+		// Phone is required and unique, provide a placeholder for SSO users.
+		// A better long-term solution might be to make the phone field nullable.
+		Phone: "sso_" + info.Email,
 	}
-	id, err := u.repo.CreateUser(newUser)
+	id, err := u.repo.CreateUser(newUser.Name, newUser.Email, newUser.Phone, newUser.Password)
 	if err != nil {
 		return "", err
 	}
-	token, err := jwtpkg.GenerateToken(id, newUser.Role)
-	if err != nil {
-		return "", err
-	}
-	return token, nil
+
+	return jwtpkg.GenerateToken(id, newUser.Role)
+}
+
+func (u *authUsecase) GetAllUsers() ([]*User, error) {
+	return u.repo.GetAllUsers()
+}
+
+func (u *authUsecase) GetUserByID(id int64) (*User, error) {
+	return u.repo.GetUserByID(id)
 }

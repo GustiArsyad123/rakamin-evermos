@@ -12,17 +12,23 @@ import (
 )
 
 func main() {
-	// allow overriding DB via env
-	os.Setenv("DB_HOST", getenv("DB_HOST", "127.0.0.1"))
+	// DB connection details are now read from environment variables by the driver
 	dbConn, err := db.NewMySQL()
 	if err != nil {
 		log.Fatalf("db connect: %v", err)
 	}
+	defer dbConn.Close()
+
 	r := mux.NewRouter()
 	// attach middleware for logging and recovery to help with debugging
 	r.Use(middleware.Logging)
 	r.Use(middleware.Recover)
-	auth.RegisterRoutes(r, dbConn)
+
+	// Initialize layers
+	repo := auth.NewRepository(dbConn)
+	usecase := auth.NewUsecase(repo)
+	auth.RegisterRoutes(r, usecase) // Pass the usecase to RegisterRoutes
+
 	port := getenv("AUTH_PORT", "8080")
 	addr := ":" + port
 	log.Printf("auth service running on %s", addr)

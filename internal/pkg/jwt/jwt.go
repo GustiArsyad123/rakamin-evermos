@@ -2,12 +2,21 @@ package jwtpkg
 
 import (
 	"errors"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret = []byte("supersecretjwtkey")
+var jwtSecret []byte
+
+func init() {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "default-super-secret-key-for-dev" // Fallback for local development
+	}
+	jwtSecret = []byte(secret)
+}
 
 func GenerateToken(userID int64, role string) (string, error) {
 	claims := jwt.MapClaims{
