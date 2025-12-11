@@ -1,0 +1,51 @@
+# Binaries and build output
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go specific
+/vendor/
+Godeps/
+*.test
+coverage.out
+
+# Dependency directories (remove the comment below to include vendor)
+vendor/
+
+# Runtime files
+*.log
+
+# Environment files (keep secrets out of git)
+.env
+.env.local
+.env.testnet
+.env.production
+.env.*
+
+# Docker
+docker-compose.override.yml
+
+# Uploads / runtime data
+uploads/
+db_data/
+
+# IDE / editor
+.vscode/
+.idea/
+*.iml
+*.swp
+*~
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Misc
+.history
