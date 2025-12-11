@@ -18,6 +18,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("db connect: %v", err)
 	}
+	// Ensure minimal auth-related tables exist (avoids startup failure when
+	// the DB was not initialized from `sql/` files).
+	if err := db.EnsureAuthTables(dbConn); err != nil {
+		log.Fatalf("ensure auth tables: %v", err)
+	}
 	r := mux.NewRouter()
 	// attach middleware for logging and recovery to help with debugging
 	r.Use(middleware.Logging)

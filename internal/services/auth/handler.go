@@ -33,8 +33,9 @@ func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
 	r.Handle("/api/v1/auth/users/", usersHandler).Methods("GET")
 	log.Printf("registered GET /api/v1/auth/users and /api/v1/auth/users/")
 	// Get user by id: requires JWT; allowed if admin or owner
-	r.Handle("/api/v1/users/{id}", middleware.JWTAuth(makeGetUserHandler(uc))).Methods("GET")
-	log.Printf("registered GET /api/v1/users/{id}")
+	// Keep this under the auth prefix for consistency with other auth routes
+	r.Handle("/api/v1/auth/users/{id}", middleware.JWTAuth(makeGetUserHandler(uc))).Methods("GET")
+	log.Printf("registered GET /api/v1/auth/users/{id}")
 }
 
 func makeRegisterHandler(uc Usecase) http.HandlerFunc {

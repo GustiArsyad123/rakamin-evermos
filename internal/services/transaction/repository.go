@@ -95,21 +95,51 @@ func (r *mysqlRepo) ListByUser(userID int64, page, limit int) ([]*models.Transac
 	}
 	offset := (page - 1) * limit
 	var total int
-	if err := r.db.QueryRow("SELECT COUNT(1) FROM transactions WHERE user_id = ?", userID).Scan(&total); err != nil {
-		return nil, 0, err
+	var countQuery string
+	var listQuery string
+	if userID == 0 {
+		// List all transactions for testing
+		countQuery = "SELECT COUNT(1) FROM transactions"
+		listQuery = "SELECT id,user_id,store_id,total,status,created_at FROM transactions ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	} else {
+		countQuery = "SELECT COUNT(1) FROM transactions WHERE user_id = ?"
+		listQuery = "SELECT id,user_id,store_id,total,status,created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
 	}
-	rows, err := r.db.Query("SELECT id,user_id,store_id,total,status,created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", userID, limit, offset)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-	out := []*models.Transaction{}
-	for rows.Next() {
-		t := &models.Transaction{}
-		if err := rows.Scan(&t.ID, &t.UserID, &t.StoreID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
+	if userID == 0 {
+		if err := r.db.QueryRow(countQuery).Scan(&total); err != nil {
 			return nil, 0, err
 		}
-		out = append(out, t)
+		rows, err := r.db.Query(listQuery, limit, offset)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer rows.Close()
+		out := []*models.Transaction{}
+		for rows.Next() {
+			t := &models.Transaction{}
+			if err := rows.Scan(&t.ID, &t.UserID, &t.StoreID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
+				return nil, 0, err
+			}
+			out = append(out, t)
+		}
+		return out, total, nil
+	} else {
+		if err := r.db.QueryRow(countQuery, userID).Scan(&total); err != nil {
+			return nil, 0, err
+		}
+		rows, err := r.db.Query(listQuery, userID, limit, offset)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer rows.Close()
+		out := []*models.Transaction{}
+		for rows.Next() {
+			t := &models.Transaction{}
+			if err := rows.Scan(&t.ID, &t.UserID, &t.StoreID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
+				return nil, 0, err
+			}
+			out = append(out, t)
+		}
+		return out, total, nil
 	}
-	return out, total, nil
 }
