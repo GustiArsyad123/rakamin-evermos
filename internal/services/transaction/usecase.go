@@ -31,6 +31,14 @@ func (u *txnUsecase) Create(userID int64, items []ItemReq) (int64, error) {
 	if len(items) == 0 {
 		return 0, errors.New("no items")
 	}
+	// Check if user has at least one address for shipping
+	var addrCount int
+	if err := u.db.QueryRow("SELECT COUNT(1) FROM addresses WHERE user_id = ?", userID).Scan(&addrCount); err != nil {
+		return 0, err
+	}
+	if addrCount == 0 {
+		return 0, errors.New("address required for shipping")
+	}
 	// load products and ensure same store
 	var storeID int64 = 0
 	logs := []*models.ProductLog{}

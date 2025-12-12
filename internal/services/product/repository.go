@@ -12,6 +12,8 @@ type Repository interface {
 	Create(p *models.Product) (int64, error)
 	List(filters map[string]string, page, limit int) ([]*models.Product, int, error)
 	GetByID(id int64) (*models.Product, error)
+	GetStoreByID(id int64) (*models.Store, error)
+	UpdateStore(id int64, name string) error
 }
 
 type mysqlRepo struct {
@@ -60,7 +62,6 @@ func (r *mysqlRepo) GetByID(id int64) (*models.Product, error) {
 	}
 	return p, nil
 }
-
 
 func (r *mysqlRepo) List(filters map[string]string, page, limit int) ([]*models.Product, int, error) {
 	where := []string{"1=1"}
@@ -123,4 +124,19 @@ func (r *mysqlRepo) List(filters map[string]string, page, limit int) ([]*models.
 		out = append(out, p)
 	}
 	return out, total, nil
+}
+
+func (r *mysqlRepo) GetStoreByID(id int64) (*models.Store, error) {
+	s := &models.Store{}
+	row := r.db.QueryRow("SELECT id,user_id,name,created_at FROM stores WHERE id = ?", id)
+	err := row.Scan(&s.ID, &s.UserID, &s.Name, &s.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return s, err
+}
+
+func (r *mysqlRepo) UpdateStore(id int64, name string) error {
+	_, err := r.db.Exec("UPDATE stores SET name = ? WHERE id = ?", name, id)
+	return err
 }

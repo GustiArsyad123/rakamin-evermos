@@ -1,6 +1,8 @@
 package product
 
 import (
+	"errors"
+
 	"github.com/example/ms-ecommerce/internal/pkg/models"
 )
 
@@ -8,6 +10,7 @@ type Usecase interface {
 	CreateProduct(userID int64, p *models.Product) (int64, error)
 	ListProducts(filters map[string]string, page, limit int) ([]*models.Product, int, error)
 	GetProduct(id int64) (*models.Product, error)
+	UpdateStore(userID, storeID int64, name string) error
 }
 
 type productUsecase struct {
@@ -35,4 +38,19 @@ func (u *productUsecase) ListProducts(filters map[string]string, page, limit int
 
 func (u *productUsecase) GetProduct(id int64) (*models.Product, error) {
 	return u.repo.GetByID(id)
+}
+
+func (u *productUsecase) UpdateStore(userID, storeID int64, name string) error {
+	// Check ownership
+	store, err := u.repo.GetStoreByID(storeID)
+	if err != nil {
+		return err
+	}
+	if store == nil {
+		return errors.New("store not found")
+	}
+	if store.UserID != userID {
+		return errors.New("forbidden")
+	}
+	return u.repo.UpdateStore(storeID, name)
 }
