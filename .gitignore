@@ -25,7 +25,6 @@ vendor/
 .env.local
 .env.testnet
 .env.production
-.env.*
 
 # Docker
 docker-compose.override.yml
