@@ -2,14 +2,14 @@ services:
   db:
     image: mysql:8.0
     restart: unless-stopped
+    env_file: .env
     environment:
-      MYSQL_ROOT_PASSWORD: example
-      MYSQL_DATABASE: ecommerce
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
-    # map container 3306 to host 3307 to avoid conflicts with local MySQL
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "3307:3306"
+      - "${DB_PORT}:3306"
     volumes:
       - db_data:/var/lib/mysql
       - ./sql:/docker-entrypoint-initdb.d
@@ -21,8 +21,8 @@ services:
           "ping",
           "-h",
           "localhost",
-          "-u$$MYSQL_USER",
-          "-p$$MYSQL_PASSWORD",
+          "-u${DB_USER}",
+          "-p${DB_PASSWORD}",
         ]
       interval: 10s
       timeout: 5s
@@ -33,11 +33,12 @@ services:
     build:
       context: .
       dockerfile: cmd/auth/Dockerfile
+    env_file: .env
     environment:
       DB_HOST: db
-      DB_USER: user
-      DB_PASS: password
-      DB_NAME: ecommerce
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASSWORD}
+      DB_NAME: ${DB_DATABASE}
     ports:
       - "8080:8080"
     depends_on:
@@ -48,11 +49,12 @@ services:
     build:
       context: .
       dockerfile: cmd/product/Dockerfile
+    env_file: .env
     environment:
       DB_HOST: db
-      DB_USER: user
-      DB_PASS: password
-      DB_NAME: ecommerce
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASSWORD}
+      DB_NAME: ${DB_DATABASE}
     ports:
       - "8081:8081"
     depends_on:
@@ -63,11 +65,12 @@ services:
     build:
       context: .
       dockerfile: cmd/transaction/Dockerfile
+    env_file: .env
     environment:
       DB_HOST: db
-      DB_USER: user
-      DB_PASS: password
-      DB_NAME: ecommerce
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASSWORD}
+      DB_NAME: ${DB_DATABASE}
     ports:
       - "8082:8082"
     depends_on:
