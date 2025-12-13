@@ -35,6 +35,7 @@ func makeCreateHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 
 		if err := r.ParseMultipartForm(10 << 20); err != nil {
 			http.Error(w, "invalid form", http.StatusBadRequest)
@@ -73,7 +74,7 @@ func makeCreateHandler(uc Usecase) http.HandlerFunc {
 		}
 
 		p := &models.Product{Name: name, Description: desc, Price: price, Stock: stock, CategoryID: cat, ImageURL: imageURL}
-		id, err := uc.CreateProduct(uid, p)
+		id, err := uc.CreateProduct(uid, role, p)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -90,6 +91,7 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 
 		q := r.URL.Query()
 		filters := map[string]string{}
@@ -119,7 +121,7 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 			}
 		}
 
-		data, total, err := uc.ListProducts(uid, filters, page, limit)
+		data, total, err := uc.ListProducts(uid, role, filters, page, limit)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -140,11 +142,12 @@ func makeGetHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, _ := strconv.ParseInt(idStr, 10, 64)
-		p, err := uc.GetProduct(uid, id)
+		p, err := uc.GetProduct(uid, role, id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -165,6 +168,7 @@ func makeUpdateHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 
 		vars := mux.Vars(r)
 		idStr := vars["id"]
@@ -186,7 +190,7 @@ func makeUpdateHandler(uc Usecase) http.HandlerFunc {
 			return
 		}
 
-		err := uc.UpdateProduct(uid, id, req.Name, req.Description, req.Price, req.Stock, req.CategoryID)
+		err := uc.UpdateProduct(uid, role, id, req.Name, req.Description, req.Price, req.Stock, req.CategoryID)
 		if err != nil {
 			if err.Error() == "forbidden" {
 				http.Error(w, err.Error(), http.StatusForbidden)
@@ -209,12 +213,13 @@ func makeDeleteHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, _ := strconv.ParseInt(idStr, 10, 64)
 
-		err := uc.DeleteProduct(uid, id)
+		err := uc.DeleteProduct(uid, role, id)
 		if err != nil {
 			if err.Error() == "forbidden" {
 				http.Error(w, err.Error(), http.StatusForbidden)

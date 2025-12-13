@@ -29,6 +29,7 @@ type Usecase interface {
 	IssueRefreshToken(userID int64) (string, time.Time, error)
 	Refresh(refreshToken string) (string, string, time.Time, error)
 	RevokeRefreshToken(refreshToken string) error
+	RevokeAllRefreshTokens(userID int64) error
 }
 
 type authUsecase struct {
@@ -230,7 +231,7 @@ func (u *authUsecase) IssueRefreshToken(userID int64) (string, time.Time, error)
 	// hash for storage
 	h := sha256.Sum256([]byte(token))
 	hashHex := hex.EncodeToString(h[:])
-	expiresAt := time.Now().UTC().Add(time.Duration(getRefreshExpirySeconds()) * time.Second)
+	expiresAt := time.Now().Add(time.Duration(getRefreshExpirySeconds()) * time.Second)
 	if err := u.repo.CreateRefreshToken(userID, hashHex, expiresAt); err != nil {
 		return "", time.Time{}, err
 	}
@@ -251,7 +252,7 @@ func (u *authUsecase) Refresh(refreshToken string) (string, string, time.Time, e
 	if !found {
 		return "", "", time.Time{}, errors.New("invalid refresh token")
 	}
-	if time.Now().UTC().After(expiresAt) {
+	if time.Now().After(expiresAt) {
 		// delete expired token
 		_ = u.repo.DeleteRefreshToken(hashHex)
 		return "", "", time.Time{}, errors.New("refresh token expired")
@@ -280,4 +281,9 @@ func (u *authUsecase) RevokeRefreshToken(refreshToken string) error {
 	h := sha256.Sum256([]byte(refreshToken))
 	hashHex := hex.EncodeToString(h[:])
 	return u.repo.DeleteRefreshToken(hashHex)
+}
+
+// RevokeAllRefreshTokens deletes all refresh tokens for a user (admin or self)
+func (u *authUsecase) RevokeAllRefreshTokens(userID int64) error {
+	return u.repo.DeleteRefreshTokensByUser(userID)
 }

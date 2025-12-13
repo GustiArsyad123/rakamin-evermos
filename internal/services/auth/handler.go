@@ -27,6 +27,13 @@ func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
 	log.Printf("registered POST /api/v1/auth/reset-password")
 	r.HandleFunc("/api/v1/auth/sso/google", makeSSOHandler(uc)).Methods("POST")
 	log.Printf("registered POST /api/v1/auth/sso/google")
+	r.HandleFunc("/api/v1/auth/refresh", makeRefreshHandler(uc)).Methods("POST")
+	log.Printf("registered POST /api/v1/auth/refresh")
+	r.HandleFunc("/api/v1/auth/logout", makeRevokeHandler(uc)).Methods("POST")
+	log.Printf("registered POST /api/v1/auth/logout")
+	// revoke all tokens (self) or admin revoke for a user
+	r.Handle("/api/v1/auth/logout/all", middleware.JWTAuth(makeRevokeAllHandler(uc))).Methods("POST")
+	log.Printf("registered POST /api/v1/auth/logout/all")
 	// Admin-only list users (register both trailing and non-trailing variants)
 	usersHandler := middleware.JWTAuth(middleware.RequireRole("admin")(makeListUsersHandler(uc)))
 	r.Handle("/api/v1/auth/users", usersHandler).Methods("GET")
@@ -284,4 +291,83 @@ func makeUpdateUserHandler(uc Usecase) http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+}
+
+func makeRefreshHandler(uc Usecase) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		token, refresh, refreshExp, err := uc.Refresh(req.RefreshToken)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		expiresAt := time.Now().UTC().Add(1 * time.Hour)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"token":              token,
+			"expires_in":         3600,
+			"expires_at":         expiresAt.Format(time.RFC3339),
+			"refresh_token":      refresh,
+			"refresh_expires_at": refreshExp.Format(time.RFC3339),
+		})
+	}
+}
+
+func makeRevokeHandler(uc Usecase) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		if err := uc.RevokeRefreshToken(req.RefreshToken); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func makeRevokeAllHandler(uc Usecase) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			UserID *int64 `json:"user_id,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		// must be authenticated
+		requesterID, ok := middleware.GetUserID(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		role, _ := middleware.GetRole(r)
+
+		var target int64
+		if req.UserID != nil {
+			// admin may revoke for any user
+			if role != "admin" {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			target = *req.UserID
+		} else {
+			target = requesterID
+		}
+
+		if err := uc.RevokeAllRefreshTokens(target); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }

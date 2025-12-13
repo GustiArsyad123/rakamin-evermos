@@ -2,11 +2,19 @@ package middleware
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
 	jwtpkg "github.com/example/ms-ecommerce/internal/pkg/jwt"
 )
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 type ctxKey string
 
@@ -24,8 +32,14 @@ func JWTAuth(next http.Handler) http.Handler {
 			return
 		}
 		tok := strings.TrimPrefix(auth, "Bearer ")
+		tok = strings.TrimSpace(tok)
+		tok = strings.ReplaceAll(tok, " ", "")
+		tok = strings.ReplaceAll(tok, "\n", "")
+		tok = strings.ReplaceAll(tok, "\r", "")
+		tok = strings.ReplaceAll(tok, "\t", "")
 		uid, role, err := jwtpkg.ParseToken(tok)
 		if err != nil {
+			log.Printf("JWT parse error: %v, token prefix: %s", err, tok[:min(20, len(tok))])
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}

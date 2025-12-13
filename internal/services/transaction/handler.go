@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -18,6 +19,9 @@ func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
 	r.Handle("/api/v1/transactions", middleware.JWTAuth(makeCreateHandler(uc))).Methods("POST")
 	r.Handle("/api/v1/transactions", middleware.JWTAuth(makeListHandler(uc))).Methods("GET")
 	r.Handle("/api/v1/transactions/{id}", middleware.JWTAuth(makeGetHandler(uc))).Methods("GET")
+	r.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	})
 }
 
 func makeCreateHandler(uc Usecase) http.HandlerFunc {
@@ -51,10 +55,14 @@ func makeCreateHandler(uc Usecase) http.HandlerFunc {
 func makeListHandler(uc Usecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		uid, ok := middleware.GetUserID(r)
+		log.Printf("Transaction list handler: uid=%v, ok=%v", uid, ok)
 		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+		return
 		role, _ := middleware.GetRole(r)
 		q := r.URL.Query()
 		filters := map[string]string{}
