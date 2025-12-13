@@ -444,6 +444,513 @@
 				}
 			],
 			"description": "Endpoint yang berhubungan dengan transaksi dan pesanan."
+		},
+		{
+			"name": "Store Service",
+			"item": [
+				{
+					"name": "Create Store",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"My Awesome Store\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}:{{store_port}}/api/v1/stores",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{store_port}}",
+							"path": [
+								"api",
+								"v1",
+								"stores"
+							]
+						},
+						"description": "Membuat toko baru untuk user yang sedang login."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Store by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}:{{store_port}}/api/v1/stores/{{store_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{store_port}}",
+							"path": [
+								"api",
+								"v1",
+								"stores",
+								"{{store_id}}"
+							]
+						},
+						"description": "Mengambil detail toko berdasarkan ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Store",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Store Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}:{{store_port}}/api/v1/stores/{{store_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{store_port}}",
+							"path": [
+								"api",
+								"v1",
+								"stores",
+								"{{store_id}}"
+							]
+						},
+						"description": "Mengupdate informasi toko."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Store",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}:{{store_port}}/api/v1/stores/{{store_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{store_port}}",
+							"path": [
+								"api",
+								"v1",
+								"stores",
+								"{{store_id}}"
+							]
+						},
+						"description": "Menghapus toko."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "File Service",
+			"item": [
+				{
+					"name": "Upload File",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}:{{file_port}}/api/v1/files/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{file_port}}",
+							"path": [
+								"api",
+								"v1",
+								"files",
+								"upload"
+							]
+						},
+						"description": "Upload file (gambar, PDF, atau text file)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Address Service",
+			"item": [
+				{
+					"name": "Create Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"label\": \"Home\",\n    \"address\": \"Jl. Sudirman No. 123\",\n    \"city\": \"Jakarta\",\n    \"postal_code\": \"12345\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}:{{address_port}}/api/v1/addresses",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{address_port}}",
+							"path": [
+								"api",
+								"v1",
+								"addresses"
+							]
+						},
+						"description": "Membuat alamat baru untuk user."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Addresses",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}:{{address_port}}/api/v1/addresses?page=1&limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{address_port}}",
+							"path": [
+								"api",
+								"v1",
+								"addresses"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Mengambil daftar alamat user dengan pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Address by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}:{{address_port}}/api/v1/addresses/{{address_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{address_port}}",
+							"path": [
+								"api",
+								"v1",
+								"addresses",
+								"{{address_id}}"
+							]
+						},
+						"description": "Mengambil detail alamat berdasarkan ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Address",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"label\": \"Office\",\n    \"address\": \"Jl. Thamrin No. 456\",\n    \"city\": \"Jakarta\",\n    \"postal_code\": \"67890\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}:{{address_port}}/api/v1/addresses/{{address_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{address_port}}",
+							"path": [
+								"api",
+								"v1",
+								"addresses",
+								"{{address_id}}"
+							]
+						},
+						"description": "Mengupdate informasi alamat."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Address",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}:{{address_port}}/api/v1/addresses/{{address_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{address_port}}",
+							"path": [
+								"api",
+								"v1",
+								"addresses",
+								"{{address_id}}"
+							]
+						},
+						"description": "Menghapus alamat."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Category Service",
+			"item": [
+				{
+					"name": "Get Categories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}:{{auth_port}}/api/v1/categories?page=1&limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{auth_port}}",
+							"path": [
+								"api",
+								"v1",
+								"categories"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Mengambil daftar kategori produk (public endpoint)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Category by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}:{{auth_port}}/api/v1/categories/{{category_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{auth_port}}",
+							"path": [
+								"api",
+								"v1",
+								"categories",
+								"{{category_id}}"
+							]
+						},
+						"description": "Mengambil detail kategori berdasarkan ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Category (Admin Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_jwt_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Electronics\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}:{{auth_port}}/api/v1/categories",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{auth_port}}",
+							"path": [
+								"api",
+								"v1",
+								"categories"
+							]
+						},
+						"description": "Membuat kategori baru (hanya admin)."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Category (Admin Only)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_jwt_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Category Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}:{{auth_port}}/api/v1/categories/{{category_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{auth_port}}",
+							"path": [
+								"api",
+								"v1",
+								"categories",
+								"{{category_id}}"
+							]
+						},
+						"description": "Mengupdate kategori (hanya admin)."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Category (Admin Only)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}:{{auth_port}}/api/v1/categories/{{category_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"port": "{{auth_port}}",
+							"path": [
+								"api",
+								"v1",
+								"categories",
+								"{{category_id}}"
+							]
+						},
+						"description": "Menghapus kategori (hanya admin)."
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"event": [
@@ -470,22 +977,68 @@
 		{
 			"key": "base_url",
 			"value": "http://localhost",
-			"type": "string"
+			"type": "string",
+			"description": "Base URL untuk semua service"
 		},
 		{
 			"key": "auth_port",
 			"value": "8080",
-			"type": "string"
+			"type": "string",
+			"description": "Port untuk Auth Service"
 		},
 		{
 			"key": "product_port",
 			"value": "8081",
-			"type": "string"
+			"type": "string",
+			"description": "Port untuk Product Service"
 		},
 		{
 			"key": "transaction_port",
 			"value": "8082",
-			"type": "string"
+			"type": "string",
+			"description": "Port untuk Transaction Service"
+		},
+		{
+			"key": "address_port",
+			"value": "8083",
+			"type": "string",
+			"description": "Port untuk Address Service"
+		},
+		{
+			"key": "store_port",
+			"value": "8084",
+			"type": "string",
+			"description": "Port untuk Store Service"
+		},
+		{
+			"key": "file_port",
+			"value": "8085",
+			"type": "string",
+			"description": "Port untuk File Service"
+		},
+		{
+			"key": "store_id",
+			"value": "1",
+			"type": "string",
+			"description": "ID toko untuk testing"
+		},
+		{
+			"key": "address_id",
+			"value": "1",
+			"type": "string",
+			"description": "ID alamat untuk testing"
+		},
+		{
+			"key": "category_id",
+			"value": "1",
+			"type": "string",
+			"description": "ID kategori untuk testing"
+		},
+		{
+			"key": "admin_jwt_token",
+			"value": "",
+			"type": "string",
+			"description": "Token JWT untuk admin user"
 		},
 		{
 			"key": "jwt_token",
