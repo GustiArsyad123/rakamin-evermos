@@ -41,6 +41,7 @@ func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
 	log.Printf("registered GET /api/v1/auth/users and /api/v1/auth/users/")
 	// Get user by id: requires JWT; allowed if admin or owner
 	// Keep this under the auth prefix for consistency with other auth routes
+	//r.Handle("/api/v1/auth/users/{id}", middleware.JWTAuth(makeGetUserHandler(uc))).Methods("GET")
 	r.Handle("/api/v1/auth/users/{id}", middleware.JWTAuth(makeGetUserHandler(uc))).Methods("GET")
 	log.Printf("registered GET /api/v1/auth/users/{id}")
 	// Update user (owner or admin). Admin may change role.
@@ -154,35 +155,57 @@ func makeSSOHandler(uc Usecase) http.HandlerFunc {
 }
 
 func makeLoginHandler(uc Usecase) http.HandlerFunc {
+	type loginRequest struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	type loginResponse struct {
+		Token            string `json:"token"`
+		ExpiresIn        int    `json:"expires_in"`
+		ExpiresAt        string `json:"expires_at"`
+		RefreshToken     string `json:"refresh_token"`
+		RefreshExpiresAt string `json:"refresh_expires_at"`
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Email    string `json:"email"`
-			Password string `json:"password"`
-		}
+		defer r.Body.Close()
+
+		var req loginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+
 		token, userID, err := uc.Login(req.Email, req.Password)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
+			http.Error(w, "invalid email or password", http.StatusUnauthorized)
 			return
 		}
-		refresh, refreshExp, err := uc.IssueRefreshToken(userID)
+
+		refreshToken, refreshExp, err := uc.IssueRefreshToken(userID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, "failed to issue refresh token", http.StatusInternalServerError)
 			return
 		}
-		expiresAt := time.Now().UTC().Add(1 * time.Hour)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"token":              token,
-			"expires_in":         3600,
-			"expires_at":         expiresAt.Format(time.RFC3339),
-			"refresh_token":      refresh,
-			"refresh_expires_at": refreshExp.Format(time.RFC3339),
-		})
+
+		expiresIn := 3600
+		expiresAt := time.Now().UTC().Add(time.Duration(expiresIn) * time.Second)
+
+		resp := loginResponse{
+			Token:            token,
+			ExpiresIn:        expiresIn,
+			ExpiresAt:        expiresAt.Format(time.RFC3339),
+			RefreshToken:     refreshToken,
+			RefreshExpiresAt: refreshExp.UTC().Format(time.RFC3339),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
+
 
 func makeListUsersHandler(uc Usecase) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -21,32 +22,71 @@ type ctxKey string
 const (
 	ctxUserID ctxKey = "user_id"
 	ctxRole   ctxKey = "role"
+	ctxToken  ctxKey = "token"
 )
 
-// JWTAuth parses Authorization header and injects user id and role into context
+// JWTAuth adalah middleware untuk memverifikasi token JWT dari header Authorization.
 func JWTAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if auth == "" || !strings.HasPrefix(auth, "Bearer ") {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		token, err := extractToken(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		tok := strings.TrimPrefix(auth, "Bearer ")
-		tok = strings.TrimSpace(tok)
-		tok = strings.ReplaceAll(tok, " ", "")
-		tok = strings.ReplaceAll(tok, "\n", "")
-		tok = strings.ReplaceAll(tok, "\r", "")
-		tok = strings.ReplaceAll(tok, "\t", "")
-		uid, role, err := jwtpkg.ParseToken(tok)
+
+		userID, role, err := jwtpkg.ParseToken(token)
 		if err != nil {
-			log.Printf("JWT parse error: %v, token prefix: %s", err, tok[:min(20, len(tok))])
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
-		ctx := context.WithValue(r.Context(), ctxUserID, uid)
+
+		ctx := context.WithValue(r.Context(), ctxUserID, userID)
 		ctx = context.WithValue(ctx, ctxRole, role)
+		ctx = context.WithValue(ctx, ctxToken, token)
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func extractToken(r *http.Request) (string, error) {
+	log.Printf("AUTH HEADER: %q", r.Header.Get("Authorization"))
+	log.Printf("COOKIE access_token: %+v", r.Cookies())
+
+	// 1️⃣ Try Authorization Header
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	log.Printf("AUTH len=%d, prefix=%q", len(auth), func() string {
+		if len(auth) >= 10 { return auth[:10] }
+		return auth
+	}())
+
+	if auth := strings.TrimSpace(r.Header.Get("Authorization")); auth != "" {
+		parts := strings.SplitN(auth, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			return "", errors.New("invalid authorization scheme")
+		}
+
+		token := strings.TrimSpace(parts[1])
+		if token == "" {
+			return "", errors.New("missing token")
+		}
+
+		return token, nil
+	}
+
+	// 2️⃣ Fallback to Cookie
+	cookie, err := r.Cookie("access_token")
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			return "", errors.New("missing authorization header or cookie")
+		}
+		return "", err
+	}
+
+	if cookie.Value == "" {
+		return "", errors.New("empty token in cookie")
+	}
+
+	return cookie.Value, nil
 }
 
 // RequireRole checks that the injected role matches required

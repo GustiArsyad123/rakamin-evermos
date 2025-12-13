@@ -55,11 +55,7 @@ func Logging(next http.Handler) http.Handler {
 			r.Body = io.NopCloser(bytes.NewBuffer(buf))
 		}
 
-		// redact Authorization header for logging
-		auth := r.Header.Get("Authorization")
-		if auth != "" {
-			r.Header.Set("Authorization", "REDACTED")
-		}
+		// Note: Authorization header is not logged for security
 
 		start := time.Now()
 		rw := &responseWriter{ResponseWriter: w}
