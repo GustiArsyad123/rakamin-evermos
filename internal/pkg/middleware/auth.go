@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	jwtpkg "github.com/example/ms-ecommerce/internal/pkg/jwt"
+	"golang.org/x/time/rate"
 )
 
 func min(a, b int) int {
@@ -24,6 +25,19 @@ const (
 	ctxRole   ctxKey = "role"
 	ctxToken  ctxKey = "token"
 )
+
+// RateLimit adalah middleware untuk membatasi rate request per IP
+var limiter = rate.NewLimiter(10, 20) // 10 requests/second, burst 20
+
+func RateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !limiter.Allow() {
+			http.Error(w, "Too many requests", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 // JWTAuth adalah middleware untuk memverifikasi token JWT dari header Authorization.
 func JWTAuth(next http.Handler) http.Handler {
@@ -55,7 +69,9 @@ func extractToken(r *http.Request) (string, error) {
 	// 1️⃣ Try Authorization Header
 	auth := strings.TrimSpace(r.Header.Get("Authorization"))
 	log.Printf("AUTH len=%d, prefix=%q", len(auth), func() string {
-		if len(auth) >= 10 { return auth[:10] }
+		if len(auth) >= 10 {
+			return auth[:10]
+		}
 		return auth
 	}())
 

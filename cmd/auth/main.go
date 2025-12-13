@@ -27,6 +27,7 @@ func main() {
 	// attach middleware for logging and recovery to help with debugging
 	r.Use(middleware.Logging)
 	r.Use(middleware.Recover)
+	r.Use(middleware.RateLimit)
 	auth.RegisterRoutes(r, dbConn)
 	port := getenv("AUTH_PORT", "8080")
 	addr := ":" + port

@@ -20,6 +20,7 @@ func main() {
 	r := mux.NewRouter()
 	r.Use(middleware.Logging)
 	r.Use(middleware.Recover)
+	r.Use(middleware.RateLimit)
 	product.RegisterRoutes(r, dbConn)
 	port := getenv("PRODUCT_PORT", "8081")
 	addr := ":" + port
