@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/example/ms-ecommerce/internal/pkg/cache"
 	"github.com/example/ms-ecommerce/internal/pkg/models"
 )
 
@@ -17,11 +19,12 @@ type Repository interface {
 }
 
 type mysqlRepo struct {
-	db *sql.DB
+	db    *sql.DB
+	cache *cache.ProductCache
 }
 
-func NewRepo(db *sql.DB) Repository {
-	return &mysqlRepo{db: db}
+func NewRepo(db *sql.DB, cache *cache.ProductCache) Repository {
+	return &mysqlRepo{db: db, cache: cache}
 }
 
 func (r *mysqlRepo) Create(p *models.Product) (int64, error) {
@@ -86,6 +89,15 @@ func (r *mysqlRepo) Delete(id int64) error {
 }
 
 func (r *mysqlRepo) List(filters map[string]string, page, limit int) ([]*models.Product, int, error) {
+	// Try to get from cache first
+	if r.cache != nil {
+		cacheKey := r.cache.GetProductsCacheKey(filters, page, limit)
+		if products, total, err := r.cache.GetProducts(cacheKey); err == nil {
+			return products, total, nil
+		}
+		// If cache miss, continue with database query
+	}
+
 	where := []string{"1=1"}
 	args := []interface{}{}
 	if v, ok := filters["search"]; ok && v != "" {
@@ -145,5 +157,12 @@ func (r *mysqlRepo) List(filters map[string]string, page, limit int) ([]*models.
 		}
 		out = append(out, p)
 	}
+
+	// Cache the result for 5 minutes
+	if r.cache != nil {
+		cacheKey := r.cache.GetProductsCacheKey(filters, page, limit)
+		r.cache.SetProducts(cacheKey, out, total, 5*time.Minute)
+	}
+
 	return out, total, nil
 }

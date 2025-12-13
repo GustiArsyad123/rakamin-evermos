@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ecommerce-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rate-limit: "10"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/rate-limit-burst: "20"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: ecommerce.local  # Change to your domain
+    http:
+      paths:
+      - path: /api/v1/auth(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 8080
+      - path: /api/v1/products(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: product-service
+            port:
+              number: 8081
+      - path: /api/v1/transactions(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: transaction-service
+            port:
+              number: 8082
+      - path: /api/v1/addresses(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: address-service
+            port:
+              number: 8083
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: auth-service  # Health check from any service
+            port:
+              number: 8080

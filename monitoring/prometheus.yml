@@ -1,0 +1,39 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerting_rules.yml"
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth:8080']
+
+  - job_name: 'product-service'
+    static_configs:
+      - targets: ['product:8081']
+
+  - job_name: 'transaction-service'
+    static_configs:
+      - targets: ['transaction:8082']
+
+  - job_name: 'address-service'
+    static_configs:
+      - targets: ['address:8083']
+
+  - job_name: 'store-service'
+    static_configs:
+      - targets: ['store:8084']
+
+  - job_name: 'file-service'
+    static_configs:
+      - targets: ['file:8085']
+
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']

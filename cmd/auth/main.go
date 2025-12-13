@@ -9,6 +9,7 @@ import (
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
 	auth "github.com/example/ms-ecommerce/internal/services/auth"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -28,7 +29,11 @@ func main() {
 	r.Use(middleware.Logging)
 	r.Use(middleware.Recover)
 	r.Use(middleware.RateLimit)
+	r.Use(middleware.MetricsMiddleware("auth"))
 	auth.RegisterRoutes(r, dbConn)
+
+	// Add metrics endpoint
+	r.Path("/metrics").Handler(promhttp.Handler())
 	port := getenv("AUTH_PORT", "8080")
 	addr := ":" + port
 	log.Printf("auth service running on %s", addr)

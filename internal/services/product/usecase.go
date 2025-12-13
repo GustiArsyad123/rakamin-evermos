@@ -31,7 +31,17 @@ func (u *productUsecase) CreateProduct(userID int64, role string, p *models.Prod
 		return 0, err
 	}
 	p.StoreID = storeID
-	return u.repo.Create(p)
+	id, err := u.repo.Create(p)
+	if err != nil {
+		return 0, err
+	}
+
+	// Invalidate cache after creating product
+	if u.repo.(*mysqlRepo).cache != nil {
+		u.repo.(*mysqlRepo).cache.InvalidateProductsCache()
+	}
+
+	return id, nil
 }
 
 func (u *productUsecase) ListProducts(userID int64, role string, filters map[string]string, page, limit int) ([]*models.Product, int, error) {
@@ -86,7 +96,17 @@ func (u *productUsecase) UpdateProduct(userID int64, role string, id int64, name
 			return errors.New("forbidden")
 		}
 	}
-	return u.repo.Update(id, name, description, price, stock, categoryID)
+	err := u.repo.Update(id, name, description, price, stock, categoryID)
+	if err != nil {
+		return err
+	}
+
+	// Invalidate cache after updating product
+	if u.repo.(*mysqlRepo).cache != nil {
+		u.repo.(*mysqlRepo).cache.InvalidateProductsCache()
+	}
+
+	return nil
 }
 
 func (u *productUsecase) DeleteProduct(userID int64, role string, id int64) error {
@@ -109,5 +129,15 @@ func (u *productUsecase) DeleteProduct(userID int64, role string, id int64) erro
 			return errors.New("forbidden")
 		}
 	}
-	return u.repo.Delete(id)
+	err := u.repo.Delete(id)
+	if err != nil {
+		return err
+	}
+
+	// Invalidate cache after deleting product
+	if u.repo.(*mysqlRepo).cache != nil {
+		u.repo.(*mysqlRepo).cache.InvalidateProductsCache()
+	}
+
+	return nil
 }

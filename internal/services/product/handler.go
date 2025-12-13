@@ -11,13 +11,14 @@ import (
 
 	"database/sql"
 
+	"github.com/example/ms-ecommerce/internal/pkg/cache"
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
 	"github.com/example/ms-ecommerce/internal/pkg/models"
 	"github.com/gorilla/mux"
 )
 
-func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
-	repo := NewRepo(dbConn)
+func RegisterRoutes(r *mux.Router, dbConn *sql.DB, productCache *cache.ProductCache) {
+	repo := NewRepo(dbConn, productCache)
 	uc := NewUsecase(repo)
 	// create product requires authentication
 	r.Handle("/api/v1/products", middleware.JWTAuth(makeCreateHandler(uc))).Methods("POST")

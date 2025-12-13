@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/example/ms-ecommerce/internal/pkg/cache"
 	"github.com/example/ms-ecommerce/internal/pkg/db"
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
 	product "github.com/example/ms-ecommerce/internal/services/product"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -17,11 +19,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("db connect: %v", err)
 	}
+
+	// Initialize Redis cache
+	redisClient, err := db.NewRedis()
+	if err != nil {
+		log.Printf("redis connect failed, continuing without cache: %v", err)
+		redisClient = nil
+	}
+	var productCache *cache.ProductCache
+	if redisClient != nil {
+		productCache = cache.NewProductCache(db.NewRedisCache(redisClient))
+	}
+
 	r := mux.NewRouter()
 	r.Use(middleware.Logging)
 	r.Use(middleware.Recover)
 	r.Use(middleware.RateLimit)
-	product.RegisterRoutes(r, dbConn)
+	r.Use(middleware.MetricsMiddleware("product"))
+	product.RegisterRoutes(r, dbConn, productCache)
+
+	// Add metrics endpoint
+	r.Path("/metrics").Handler(promhttp.Handler())
 	port := getenv("PRODUCT_PORT", "8081")
 	addr := ":" + port
 	log.Printf("product service running on %s", addr)

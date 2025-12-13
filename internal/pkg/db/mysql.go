@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -57,6 +58,12 @@ func NewMySQL() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Configure connection pooling for optimal performance
+	db.SetMaxOpenConns(25)                 // Maximum open connections
+	db.SetMaxIdleConns(10)                 // Maximum idle connections
+	db.SetConnMaxLifetime(5 * time.Minute) // Maximum connection lifetime
+
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}

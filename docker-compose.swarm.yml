@@ -1,0 +1,197 @@
+version: "3.8"
+
+services:
+  db:
+    image: mysql:8.0
+    env_file: .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./sql:/docker-entrypoint-initdb.d
+    networks:
+      - ecommerce_network
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager # Run on manager node for persistence
+      replicas: 1
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+      restart_policy:
+        condition: on-failure
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - ecommerce_network
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.2"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+      restart_policy:
+        condition: on-failure
+
+  auth:
+    image: gustiarsyad123/rakamin-evermos-auth:latest
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASSWORD}
+      DB_NAME: ${DB_DATABASE}
+    networks:
+      - ecommerce_network
+    depends_on:
+      - db
+    deploy:
+      replicas: 3 # Higher replicas for load balancing
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.2"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+
+  product:
+    image: gustiarsyad123/rakamin-evermos-product:latest
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASSWORD}
+      DB_NAME: ${DB_DATABASE}
+    networks:
+      - ecommerce_network
+    depends_on:
+      - db
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.2"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+
+  transaction:
+    image: gustiarsyad123/rakamin-evermos-transaction:latest
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASSWORD}
+      DB_NAME: ${DB_DATABASE}
+    networks:
+      - ecommerce_network
+    depends_on:
+      - db
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.2"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+
+  address:
+    image: gustiarsyad123/rakamin-evermos-address:latest
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASSWORD}
+      DB_NAME: ${DB_DATABASE}
+    networks:
+      - ecommerce_network
+    depends_on:
+      - db
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.2"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/conf.d/default.conf
+    networks:
+      - ecommerce_network
+    depends_on:
+      - auth
+      - product
+      - transaction
+      - address
+    deploy:
+      replicas: 2 # Load balance nginx itself
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.1"
+        reservations:
+          memory: 64M
+          cpus: "0.05"
+      restart_policy:
+        condition: on-failure
+
+networks:
+  ecommerce_network:
+    driver: overlay
+
+volumes:
+  db_data:
+    driver: local
+  redis_data:
+    driver: local
+
+configs:
+  nginx_config:
+    file: ./nginx.conf
