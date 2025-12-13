@@ -3,6 +3,7 @@ package transaction
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/example/ms-ecommerce/internal/pkg/models"
 )
@@ -10,7 +11,7 @@ import (
 type Repository interface {
 	Create(txn *models.Transaction, logs []*models.ProductLog) (int64, error)
 	GetByID(id int64) (*models.Transaction, []*models.ProductLog, error)
-	ListByUser(userID int64, page, limit int) ([]*models.Transaction, int, error)
+	ListByUser(userID int64, filters map[string]string, page, limit int) ([]*models.Transaction, int, error)
 }
 
 type mysqlRepo struct {
@@ -32,7 +33,7 @@ func (r *mysqlRepo) Create(txn *models.Transaction, logs []*models.ProductLog) (
 		}
 	}()
 
-	res, err := tx.Exec("INSERT INTO transactions (user_id,store_id,total,status) VALUES (?,?,?,?)", txn.UserID, txn.StoreID, txn.Total, txn.Status)
+	res, err := tx.Exec("INSERT INTO transactions (user_id,store_id,address_id,total,status) VALUES (?,?,?,?,?)", txn.UserID, txn.StoreID, txn.AddressID, txn.Total, txn.Status)
 	if err != nil {
 		return 0, err
 	}
@@ -63,8 +64,8 @@ func (r *mysqlRepo) Create(txn *models.Transaction, logs []*models.ProductLog) (
 
 func (r *mysqlRepo) GetByID(id int64) (*models.Transaction, []*models.ProductLog, error) {
 	t := &models.Transaction{}
-	row := r.db.QueryRow("SELECT id,user_id,store_id,total,status,created_at FROM transactions WHERE id = ?", id)
-	if err := row.Scan(&t.ID, &t.UserID, &t.StoreID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
+	row := r.db.QueryRow("SELECT id,user_id,store_id,address_id,total,status,created_at FROM transactions WHERE id = ?", id)
+	if err := row.Scan(&t.ID, &t.UserID, &t.StoreID, &t.AddressID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil, nil
 		}
@@ -86,7 +87,43 @@ func (r *mysqlRepo) GetByID(id int64) (*models.Transaction, []*models.ProductLog
 	return t, logs, nil
 }
 
-func (r *mysqlRepo) ListByUser(userID int64, page, limit int) ([]*models.Transaction, int, error) {
+func (r *mysqlRepo) ListByUser(userID int64, filters map[string]string, page, limit int) ([]*models.Transaction, int, error) {
+	where := []string{}
+	args := []interface{}{}
+
+	if userID != 0 {
+		where = append(where, "user_id = ?")
+		args = append(args, userID)
+	}
+
+	if v, ok := filters["status"]; ok && v != "" {
+		where = append(where, "status = ?")
+		args = append(args, v)
+	}
+	if v, ok := filters["store_id"]; ok && v != "" {
+		where = append(where, "store_id = ?")
+		args = append(args, v)
+	}
+	if v, ok := filters["min_total"]; ok && v != "" {
+		where = append(where, "total >= ?")
+		args = append(args, v)
+	}
+	if v, ok := filters["max_total"]; ok && v != "" {
+		where = append(where, "total <= ?")
+		args = append(args, v)
+	}
+
+	whereClause := ""
+	if len(where) > 0 {
+		whereClause = " WHERE " + fmt.Sprintf("%s", strings.Join(where, " AND "))
+	}
+
+	countQuery := fmt.Sprintf("SELECT COUNT(1) FROM transactions%s", whereClause)
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
 	if limit <= 0 {
 		limit = 10
 	}
@@ -94,52 +131,22 @@ func (r *mysqlRepo) ListByUser(userID int64, page, limit int) ([]*models.Transac
 		page = 1
 	}
 	offset := (page - 1) * limit
-	var total int
-	var countQuery string
-	var listQuery string
-	if userID == 0 {
-		// List all transactions for testing
-		countQuery = "SELECT COUNT(1) FROM transactions"
-		listQuery = "SELECT id,user_id,store_id,total,status,created_at FROM transactions ORDER BY created_at DESC LIMIT ? OFFSET ?"
-	} else {
-		countQuery = "SELECT COUNT(1) FROM transactions WHERE user_id = ?"
-		listQuery = "SELECT id,user_id,store_id,total,status,created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+
+	listQuery := fmt.Sprintf("SELECT id,user_id,store_id,address_id,total,status,created_at FROM transactions%s ORDER BY created_at DESC LIMIT ? OFFSET ?", whereClause)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(listQuery, args...)
+	if err != nil {
+		return nil, 0, err
 	}
-	if userID == 0 {
-		if err := r.db.QueryRow(countQuery).Scan(&total); err != nil {
+	defer rows.Close()
+	out := []*models.Transaction{}
+	for rows.Next() {
+		t := &models.Transaction{}
+		if err := rows.Scan(&t.ID, &t.UserID, &t.StoreID, &t.AddressID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
 			return nil, 0, err
 		}
-		rows, err := r.db.Query(listQuery, limit, offset)
-		if err != nil {
-			return nil, 0, err
-		}
-		defer rows.Close()
-		out := []*models.Transaction{}
-		for rows.Next() {
-			t := &models.Transaction{}
-			if err := rows.Scan(&t.ID, &t.UserID, &t.StoreID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
-				return nil, 0, err
-			}
-			out = append(out, t)
-		}
-		return out, total, nil
-	} else {
-		if err := r.db.QueryRow(countQuery, userID).Scan(&total); err != nil {
-			return nil, 0, err
-		}
-		rows, err := r.db.Query(listQuery, userID, limit, offset)
-		if err != nil {
-			return nil, 0, err
-		}
-		defer rows.Close()
-		out := []*models.Transaction{}
-		for rows.Next() {
-			t := &models.Transaction{}
-			if err := rows.Scan(&t.ID, &t.UserID, &t.StoreID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
-				return nil, 0, err
-			}
-			out = append(out, t)
-		}
-		return out, total, nil
+		out = append(out, t)
 	}
+	return out, total, nil
 }

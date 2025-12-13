@@ -36,6 +36,9 @@ func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
 	// Keep this under the auth prefix for consistency with other auth routes
 	r.Handle("/api/v1/auth/users/{id}", middleware.JWTAuth(makeGetUserHandler(uc))).Methods("GET")
 	log.Printf("registered GET /api/v1/auth/users/{id}")
+	// Update user (owner or admin). Admin may change role.
+	r.Handle("/api/v1/auth/users/{id}", middleware.JWTAuth(makeUpdateUserHandler(uc))).Methods("PUT")
+	log.Printf("registered PUT /api/v1/auth/users/{id}")
 }
 
 func makeRegisterHandler(uc Usecase) http.HandlerFunc {
@@ -48,6 +51,10 @@ func makeRegisterHandler(uc Usecase) http.HandlerFunc {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		if req.Name == "" || req.Email == "" || req.Phone == "" || req.Password == "" {
+			http.Error(w, "name, email, phone, and password are required", http.StatusBadRequest)
 			return
 		}
 		u := &models.User{Name: req.Name, Email: req.Email, Phone: req.Phone, Password: req.Password}
@@ -239,5 +246,42 @@ func makeGetUserHandler(uc Usecase) http.Handler {
 			return
 		}
 		json.NewEncoder(w).Encode(u)
+	})
+}
+
+func makeUpdateUserHandler(uc Usecase) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		idStr := vars["id"]
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		reqUID, ok := middleware.GetUserID(r)
+		role, _ := middleware.GetRole(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var body struct {
+			Name  *string `json:"name"`
+			Phone *string `json:"phone"`
+			Role  *string `json:"role"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		// enforce authorization in usecase
+		if err := uc.UpdateUser(reqUID, id, role, body.Name, body.Phone, body.Role); err != nil {
+			if err.Error() == "forbidden" {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 }

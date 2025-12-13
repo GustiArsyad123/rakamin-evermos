@@ -7,7 +7,7 @@ type Usecase interface {
 	Update(id int64, name string) error
 	Delete(id int64) error
 	Get(id int64) (*models.Category, error)
-	List() ([]*models.Category, error)
+	List(filters map[string]string, page, limit int) ([]*models.Category, int, error)
 }
 
 type categoryUsecase struct {
@@ -34,6 +34,6 @@ func (u *categoryUsecase) Get(id int64) (*models.Category, error) {
 	return u.repo.GetByID(id)
 }
 
-func (u *categoryUsecase) List() ([]*models.Category, error) {
-	return u.repo.List()
+func (u *categoryUsecase) List(filters map[string]string, page, limit int) ([]*models.Category, int, error) {
+	return u.repo.List(filters, page, limit)
 }

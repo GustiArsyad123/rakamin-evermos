@@ -8,9 +8,9 @@ import (
 )
 
 type Usecase interface {
-	Create(userID int64, items []ItemReq) (int64, error)
+	Create(userID int64, addressID int64, items []ItemReq) (int64, error)
 	Get(userID, id int64) (*models.Transaction, []*models.ProductLog, error)
-	List(userID int64, page, limit int) ([]*models.Transaction, int, error)
+	List(userID int64, filters map[string]string, page, limit int) ([]*models.Transaction, int, error)
 }
 
 type ItemReq struct {
@@ -27,17 +27,20 @@ func NewUsecase(r Repository, db *sql.DB) Usecase {
 	return &txnUsecase{repo: r, db: db}
 }
 
-func (u *txnUsecase) Create(userID int64, items []ItemReq) (int64, error) {
+func (u *txnUsecase) Create(userID int64, addressID int64, items []ItemReq) (int64, error) {
 	if len(items) == 0 {
 		return 0, errors.New("no items")
 	}
-	// Check if user has at least one address for shipping
-	var addrCount int
-	if err := u.db.QueryRow("SELECT COUNT(1) FROM addresses WHERE user_id = ?", userID).Scan(&addrCount); err != nil {
+	// Validate address belongs to user
+	var addrUserID int64
+	if err := u.db.QueryRow("SELECT user_id FROM addresses WHERE id = ?", addressID).Scan(&addrUserID); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, errors.New("address not found")
+		}
 		return 0, err
 	}
-	if addrCount == 0 {
-		return 0, errors.New("address required for shipping")
+	if addrUserID != userID {
+		return 0, errors.New("address does not belong to user")
 	}
 	// load products and ensure same store
 	var storeID int64 = 0
@@ -68,7 +71,7 @@ func (u *txnUsecase) Create(userID int64, items []ItemReq) (int64, error) {
 		logs = append(logs, &models.ProductLog{ProductID: p.ID, ProductName: p.Name, ProductPrice: p.Price, Quantity: it.Quantity})
 	}
 
-	txn := &models.Transaction{UserID: userID, StoreID: storeID, Total: total, Status: "pending"}
+	txn := &models.Transaction{UserID: userID, StoreID: storeID, AddressID: addressID, Total: total, Status: "pending"}
 	id, err := u.repo.Create(txn, logs)
 	if err != nil {
 		return 0, err
@@ -88,6 +91,6 @@ func (u *txnUsecase) Get(userID, id int64) (*models.Transaction, []*models.Produ
 	return t, logs, nil
 }
 
-func (u *txnUsecase) List(userID int64, page, limit int) ([]*models.Transaction, int, error) {
-	return u.repo.ListByUser(userID, page, limit)
+func (u *txnUsecase) List(userID int64, filters map[string]string, page, limit int) ([]*models.Transaction, int, error) {
+	return u.repo.ListByUser(userID, filters, page, limit)
 }

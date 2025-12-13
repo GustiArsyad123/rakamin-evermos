@@ -75,12 +75,35 @@ func makeDeleteHandler(uc Usecase) http.Handler {
 
 func makeListHandler(uc Usecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		data, err := uc.List()
+		q := r.URL.Query()
+		filters := map[string]string{}
+		if v := q.Get("search"); v != "" {
+			filters["search"] = v
+		}
+
+		page := 1
+		limit := 10
+		if v := q.Get("page"); v != "" {
+			if pi, err := strconv.Atoi(v); err == nil && pi > 0 {
+				page = pi
+			}
+		}
+		if v := q.Get("limit"); v != "" {
+			if li, err := strconv.Atoi(v); err == nil && li > 0 {
+				limit = li
+			}
+		}
+
+		data, total, err := uc.List(filters, page, limit)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{"data": data})
+		resp := map[string]interface{}{
+			"data":       data,
+			"pagination": map[string]interface{}{"page": page, "limit": limit, "total": total},
+		}
+		json.NewEncoder(w).Encode(resp)
 	}
 }
 

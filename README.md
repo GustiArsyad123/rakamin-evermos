@@ -4,8 +4,13 @@ This repository is a starter scaffold for a Go microservices project using MySQL
 
 Included:
 
-- `auth` service: implemented (register, login) — register auto-creates a `store` for the user.
-- skeletons for `account`, `store`, `address`, `category`, `product`, `transaction` services
+- `auth` service: implemented (register, login) — register auto-creates a `store` for the user with proper error handling.
+- `store` service: implemented (CRUD stores)
+- `file` service: implemented (file upload)
+- `address` service: implemented (CRUD addresses)
+- `category` service: implemented (admin-only management)
+- `product` service: implemented (CRUD products)
+- `transaction` service: implemented (create/list/get transactions)
 - `docker-compose.yml` with MySQL
 - `sql/schema.sql` with tables and constraints
 
@@ -31,7 +36,7 @@ API endpoints (auth service)
 
 Notes
 
-- This is a scaffold focusing on Clean Architecture structure and an implemented Auth service. You can extend other services in `internal/services/*` following the same pattern.
+- All microservices are fully implemented following Clean Architecture principles. Each service runs independently on its designated port and can be started with `go run cmd/<service>/main.go` (where service is auth, store, file, product, transaction, address).
 
 Environment files
 
@@ -42,16 +47,16 @@ Environment files
 
 Usage examples
 
-- Load local env before running a service locally:
+- Load local env before running a service locally (replace `<service>` with auth, store, product, transaction, address):
 
 ```bash
 # from repo root
 source .env.local
 DB_HOST=${DB_HOST} DB_PORT=${DB_PORT} DB_USER=${DB_USER} DB_PASS=${DB_PASS} DB_NAME=${DB_NAME} \
-	go run cmd/auth/main.go
+	go run cmd/<service>/main.go
 ```
 
-- If you run services with Docker Compose, the auth/product/transaction containers connect to the internal `db` service automatically. Use the `.env.*` files for local development or to create your deployment configs.
+- If you run services with Docker Compose, the auth/store/file/product/transaction/address containers connect to the internal `db` service automatically. Use the `.env.*` files for local development or to create your deployment configs.
 
 ## Database Schema
 
@@ -145,15 +150,19 @@ This section lists the main routes, methods, request body and query parameters f
 Base URLs when running locally via Docker Compose:
 
 - Auth: `http://localhost:8080`
+- Store: `http://localhost:8084`
+- File: `http://localhost:8085`
 - Product: `http://localhost:8081`
 - Transaction: `http://localhost:8082`
+- Address: `http://localhost:8083`
 
 ### 1. Auth
 
 - POST /api/v1/auth/register
 
   - Body (JSON): { "name": string, "email": string, "phone": string, "password": string }
-  - Response: { "token": string }
+  - Response: { "token": string, "expires_in": 3600, "expires_at": string, "refresh_token": string, "refresh_expires_at": string }
+  - Notes: All fields required. Email and phone must be unique across users. Auto-creates a store for the user with name "{user_name}'s Store".
 
 - POST /api/v1/auth/login
 
@@ -185,10 +194,81 @@ Base URLs when running locally via Docker Compose:
 
 - GET /api/v1/users/:id
 
+- PUT /api/v1/auth/users/{id}
+
+  - Headers: `Authorization: Bearer <token>`
+  - Body (JSON): any of { "name": string, "phone": string, "role": string }
+    - `role` may only be changed by an admin.
+  - Behavior: Only the user themself (owner) or an admin may update a user. Non-admins cannot update other users or change roles.
+  - Response: 204 No Content
+  - Examples:
+
+    - Owner updating their own name:
+      ```bash
+      curl -i -X PUT http://localhost:8080/api/v1/auth/users/123 \
+        -H "Authorization: Bearer <owner-token>" \
+        -H "Content-Type: application/json" \
+        -d '{"name":"New Name","phone":"081234567899"}'
+      ```
+    - Non-owner (non-admin) attempting to update another user:
+      ```bash
+      curl -i -X PUT http://localhost:8080/api/v1/auth/users/456 \
+        -H "Authorization: Bearer <non-owner-token>" \
+        -H "Content-Type: application/json" \
+        -d '{"name":"Hacker"}'
+      # => 403 Forbidden
+      ```
+    - Admin changing another user's role:
+      ```bash
+      curl -i -X PUT http://localhost:8080/api/v1/auth/users/456 \
+        -H "Authorization: Bearer <admin-token>" \
+        -H "Content-Type: application/json" \
+        -d '{"role":"admin"}'
+      # => 204 No Content
+      ```
+
   - Headers: `Authorization: Bearer <token>`
   - Response: user object (owner or admin only)
 
-### 2. Product
+### 2. Store
+
+- POST /api/v1/stores
+
+  - Headers: `Authorization: Bearer <token>`
+  - Body (JSON): { "name": string }
+  - Response: { "id": int }
+
+- GET /api/v1/stores/{id}
+
+  - Headers: `Authorization: Bearer <token>`
+  - Response: store object (owner only)
+
+- PUT /api/v1/stores/{id}
+
+  - Headers: `Authorization: Bearer <token>`
+  - Body (JSON): { "name": string }
+  - Response: 204 No Content (owner only)
+
+- DELETE /api/v1/stores/{id}
+
+  - Headers: `Authorization: Bearer <token>`
+  - Response: 204 No Content (owner only)
+
+### 3. File
+
+- POST /api/v1/files/upload
+
+  - Headers: `Authorization: Bearer <token>`
+  - Body: multipart/form-data
+    - file: `file` (required)
+  - Response: { "url": string, "filename": string, "size": int }
+  - Notes: Supports images (JPEG, PNG, GIF, WebP), PDF, and text files. Max 5MB. Files saved with user ID prefix.
+
+- GET /uploads/{filename}
+
+  - Public access to uploaded files
+
+### 4. Product
 
 - POST /api/v1/products
 
@@ -200,12 +280,16 @@ Base URLs when running locally via Docker Compose:
 
 - GET /api/v1/products
 
-  - Query params: `page` (int), `limit` (int), `search` (string), `category_id`, `store_id`, `min_price`, `max_price`
+  - Headers: `Authorization: Bearer <token>`
+  - Query params: `page` (int), `limit` (int), `search` (string), `category_id`, `min_price`, `max_price`
   - Response: { "data": [...], "pagination": { "page":, "limit":, "total": } }
+  - Notes: Lists products from user's store only
 
 - GET /api/v1/products/:id
 
+  - Headers: `Authorization: Bearer <token>`
   - Response: product object
+  - Notes: Owner-only
 
 - PUT /api/v1/stores/:id
 
@@ -214,12 +298,45 @@ Base URLs when running locally via Docker Compose:
   - Response: 204 No Content
   - Notes: Owner-only
 
-### 3. Category
+### 3. Address
+
+- POST /api/v1/addresses
+
+  - Headers: `Authorization: Bearer <token>`
+  - Body (JSON): { "label": string, "address": string, "city": string, "postal_code": string }
+  - Response: { "id": <address_id> }
+
+- GET /api/v1/addresses
+
+  - Headers: `Authorization: Bearer <token>`
+  - Query params: `page` (int), `limit` (int), `label` (string, partial match), `city` (string), `postal_code` (string)
+  - Response: { "data": [address objects], "pagination": { "page": int, "limit": int, "total": int } }
+
+- GET /api/v1/addresses/:id
+
+  - Headers: `Authorization: Bearer <token>`
+  - Response: address object
+  - Notes: Owner-only
+
+- PUT /api/v1/addresses/:id
+
+  - Headers: `Authorization: Bearer <token>`
+  - Body (JSON): { "label": string, "address": string, "city": string, "postal_code": string }
+  - Response: 204 No Content
+  - Notes: Owner-only
+
+- DELETE /api/v1/addresses/:id
+
+  - Headers: `Authorization: Bearer <token>`
+  - Response: 204 No Content
+  - Notes: Owner-only
+
+### 5. Category
 
 - GET /api/v1/categories
 
-  - Query params: none
-  - Response: { "data": [ { "id": int, "name": string, "created_at": string }, ... ] }
+  - Query params: `page` (int), `limit` (int), `search` (string, partial match on name)
+  - Response: { "data": [ { "id": int, "name": string, "created_at": string }, ... ], "pagination": { "page": int, "limit": int, "total": int } }
 
 - GET /api/v1/categories/:id
 
@@ -245,26 +362,65 @@ Base URLs when running locally via Docker Compose:
   - Response: 204 No Content
   - Notes: Admin-only
 
-### 4. Transaction
+### 6. Transaction
 
 - POST /api/v1/transactions
 
   - Headers: `Authorization: Bearer <token>`
-  - Body (JSON): { "items": [ { "product_id": int, "quantity": int }, ... ] }
-  - Behavior: all items must be from the same store; creates `transactions` and `product_logs`, decrements product stock atomically.
+  - Body (JSON): { "address_id": int, "items": [ { "product_id": int, "quantity": int }, ... ] }
+  - Behavior: all items must be from the same store; address must belong to user; creates `transactions` and `product_logs`, decrements product stock atomically.
   - Response: { "id": <transaction_id> }
 
 - GET /api/v1/transactions
 
   - Headers: `Authorization: Bearer <token>`
-  - Query params: `page`, `limit`
-  - Response: list of user's transactions (paginated)
+  - Query params: `page` (int), `limit` (int), `status` (string), `store_id` (int), `min_total` (float), `max_total` (float)
+  - Response: { "data": [...], "pagination": { "page": int, "limit": int, "total": int } }
 
 - GET /api/v1/transactions/:id
   - Headers: `Authorization: Bearer <token>`
   - Response: { "transaction": {...}, "logs": [...] }
 
+### Examples — Filtered Requests
+
+Below are copy-pasteable curl examples that show how to call the filtered endpoints described above. Replace `<token>` and IDs with real values from your environment.
+
+- List products from your store (search + price range + pagination):
+
+  ```bash
+  curl -s -H "Authorization: Bearer <token>" \
+    "http://localhost:8081/api/v1/products?page=1&limit=10&search=phone&min_price=100&max_price=1000" | jq
+  ```
+
+- List addresses (filter by label or city):
+
+  ```bash
+  curl -s -H "Authorization: Bearer <token>" \
+    "http://localhost:8083/api/v1/addresses?page=1&limit=10&label=home&city=Jakarta" | jq
+  ```
+
+- List categories (search + pagination):
+
+  ```bash
+  curl -s "http://localhost:8080/api/v1/categories?page=1&limit=20&search=elect" | jq
+  ```
+
+- List transactions (status/store/total filters):
+
+  ```bash
+  curl -s -H "Authorization: Bearer <token>" \
+    "http://localhost:8082/api/v1/transactions?page=1&limit=20&status=paid&min_total=10&max_total=500" | jq
+  ```
+
+- Admin: list users (search + pagination):
+
+  ```bash
+  curl -s -H "Authorization: Bearer <admin-token>" \
+    "http://localhost:8080/api/v1/auth/users?page=1&limit=20&search=alice" | jq
+  ```
+
 Notes
 
 - Category management is admin-only; use DB to mark a user as admin (see `sql/seed.sql`).
+- Admin user credentials: email=`admin@example.com`, password=`admin123` (after running seed.sql).
 - Pagination and filtering params follow the patterns above.

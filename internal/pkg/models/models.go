@@ -41,6 +41,7 @@ type Transaction struct {
 	ID        int64     `json:"id"`
 	UserID    int64     `json:"user_id"`
 	StoreID   int64     `json:"store_id"`
+	AddressID int64     `json:"address_id"`
 	Total     float64   `json:"total"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
@@ -54,4 +55,14 @@ type ProductLog struct {
 	ProductPrice  float64   `json:"product_price"`
 	Quantity      int       `json:"quantity"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+type Address struct {
+	ID         int64     `json:"id"`
+	UserID     int64     `json:"user_id"`
+	Label      string    `json:"label"`
+	Address    string    `json:"address"`
+	City       string    `json:"city"`
+	PostalCode string    `json:"postal_code"`
+	CreatedAt  time.Time `json:"created_at"`
 }

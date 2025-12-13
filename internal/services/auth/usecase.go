@@ -24,6 +24,7 @@ type Usecase interface {
 	ResetPassword(token, newPassword string) error
 	SSOLogin(idToken string) (string, int64, error)
 	GetUserByID(id int64) (*models.User, error)
+	UpdateUser(requesterID, id int64, requesterRole string, name, phone, role *string) error
 	ListUsers(page, limit int, search string) ([]*models.User, int, error)
 	IssueRefreshToken(userID int64) (string, time.Time, error)
 	Refresh(refreshToken string) (string, string, time.Time, error)
@@ -44,6 +45,10 @@ func (u *authUsecase) Register(user *models.User) (string, int64, error) {
 	if existing != nil {
 		return "", 0, errors.New("email already registered")
 	}
+	existing, _ = u.repo.GetUserByPhone(user.Phone)
+	if existing != nil {
+		return "", 0, errors.New("phone number already registered")
+	}
 	// hash password
 	h, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -53,6 +58,14 @@ func (u *authUsecase) Register(user *models.User) (string, int64, error) {
 	id, err := u.repo.CreateUser(user)
 	if err != nil {
 		return "", 0, err
+	}
+	// create store automatically
+	storeName := user.Name + "'s Store"
+	err = u.repo.CreateStore(id, storeName)
+	if err != nil {
+		// If store creation fails, we should ideally delete the user, but for simplicity, log error
+		// In production, use transactions
+		return "", 0, errors.New("user created but failed to create store: " + err.Error())
 	}
 	token, err := jwtpkg.GenerateToken(id, user.Role)
 	if err != nil {
@@ -176,6 +189,17 @@ func (u *authUsecase) SSOLogin(idToken string) (string, int64, error) {
 
 func (u *authUsecase) GetUserByID(id int64) (*models.User, error) {
 	return u.repo.GetUserByID(id)
+}
+
+func (u *authUsecase) UpdateUser(requesterID, id int64, requesterRole string, name, phone, role *string) error {
+	// Only owner or admin can update. Only admin can change role.
+	if requesterRole != "admin" && requesterID != id {
+		return errors.New("forbidden")
+	}
+	if role != nil && requesterRole != "admin" {
+		return errors.New("forbidden")
+	}
+	return u.repo.UpdateUser(id, name, phone, role)
 }
 
 func (u *authUsecase) ListUsers(page, limit int, search string) ([]*models.User, int, error) {

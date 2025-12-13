@@ -2,15 +2,15 @@ package product
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/example/ms-ecommerce/internal/pkg/models"
 )
 
 type Usecase interface {
 	CreateProduct(userID int64, p *models.Product) (int64, error)
-	ListProducts(filters map[string]string, page, limit int) ([]*models.Product, int, error)
-	GetProduct(id int64) (*models.Product, error)
-	UpdateStore(userID, storeID int64, name string) error
+	ListProducts(userID int64, filters map[string]string, page, limit int) ([]*models.Product, int, error)
+	GetProduct(userID, id int64) (*models.Product, error)
 }
 
 type productUsecase struct {
@@ -32,25 +32,30 @@ func (u *productUsecase) CreateProduct(userID int64, p *models.Product) (int64, 
 	return u.repo.Create(p)
 }
 
-func (u *productUsecase) ListProducts(filters map[string]string, page, limit int) ([]*models.Product, int, error) {
+func (u *productUsecase) ListProducts(userID int64, filters map[string]string, page, limit int) ([]*models.Product, int, error) {
+	// find store id by user
+	var storeID int64
+	row := u.repo.(*mysqlRepo).db.QueryRow("SELECT id FROM stores WHERE user_id = ?", userID)
+	if err := row.Scan(&storeID); err != nil {
+		return nil, 0, err
+	}
+	filters["store_id"] = strconv.FormatInt(storeID, 10)
 	return u.repo.List(filters, page, limit)
 }
 
-func (u *productUsecase) GetProduct(id int64) (*models.Product, error) {
-	return u.repo.GetByID(id)
-}
-
-func (u *productUsecase) UpdateStore(userID, storeID int64, name string) error {
-	// Check ownership
-	store, err := u.repo.GetStoreByID(storeID)
+func (u *productUsecase) GetProduct(userID, id int64) (*models.Product, error) {
+	p, err := u.repo.GetByID(id)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if store == nil {
-		return errors.New("store not found")
+	// find store id by user
+	var storeID int64
+	row := u.repo.(*mysqlRepo).db.QueryRow("SELECT id FROM stores WHERE user_id = ?", userID)
+	if err := row.Scan(&storeID); err != nil {
+		return nil, err
 	}
-	if store.UserID != userID {
-		return errors.New("forbidden")
+	if p.StoreID != storeID {
+		return nil, errors.New("unauthorized")
 	}
-	return u.repo.UpdateStore(storeID, name)
+	return p, nil
 }

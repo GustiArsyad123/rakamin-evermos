@@ -61,11 +61,13 @@ CREATE TABLE IF NOT EXISTS transactions (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT NOT NULL,
   store_id BIGINT NOT NULL,
+  address_id BIGINT NOT NULL,
   total DECIMAL(12,2) NOT NULL,
   status VARCHAR(50) NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id),
-  FOREIGN KEY (store_id) REFERENCES stores(id)
+  FOREIGN KEY (store_id) REFERENCES stores(id),
+  FOREIGN KEY (address_id) REFERENCES addresses(id)
 );
 
 -- product_logs: snapshot of product in a transaction

@@ -29,13 +29,18 @@ func makeCreateHandler(uc Usecase) http.HandlerFunc {
 			return
 		}
 		var req struct {
-			Items []ItemReq `json:"items"`
+			AddressID int64     `json:"address_id"`
+			Items     []ItemReq `json:"items"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid", http.StatusBadRequest)
 			return
 		}
-		id, err := uc.Create(uid, req.Items)
+		if req.AddressID == 0 {
+			http.Error(w, "address_id is required", http.StatusBadRequest)
+			return
+		}
+		id, err := uc.Create(uid, req.AddressID, req.Items)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -53,6 +58,20 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 		// 	return
 		// }
 		q := r.URL.Query()
+		filters := map[string]string{}
+		if v := q.Get("status"); v != "" {
+			filters["status"] = v
+		}
+		if v := q.Get("store_id"); v != "" {
+			filters["store_id"] = v
+		}
+		if v := q.Get("min_total"); v != "" {
+			filters["min_total"] = v
+		}
+		if v := q.Get("max_total"); v != "" {
+			filters["max_total"] = v
+		}
+
 		page := 1
 		limit := 10
 		if v := q.Get("page"); v != "" {
@@ -66,7 +85,7 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 			}
 		}
 		// Pass 0 to list all transactions for testing
-		data, total, err := uc.List(0, page, limit)
+		data, total, err := uc.List(0, filters, page, limit)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

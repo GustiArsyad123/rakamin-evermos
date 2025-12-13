@@ -2,6 +2,8 @@ package category
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"github.com/example/ms-ecommerce/internal/pkg/models"
 )
@@ -11,7 +13,7 @@ type Repository interface {
 	Update(id int64, name string) error
 	Delete(id int64) error
 	GetByID(id int64) (*models.Category, error)
-	List() ([]*models.Category, error)
+	List(filters map[string]string, page, limit int) ([]*models.Category, int, error)
 }
 
 type mysqlRepo struct {
@@ -53,19 +55,43 @@ func (r *mysqlRepo) GetByID(id int64) (*models.Category, error) {
 	return c, nil
 }
 
-func (r *mysqlRepo) List() ([]*models.Category, error) {
-	rows, err := r.db.Query("SELECT id,name,created_at FROM categories ORDER BY name ASC")
+func (r *mysqlRepo) List(filters map[string]string, page, limit int) ([]*models.Category, int, error) {
+	where := []string{"1=1"}
+	args := []interface{}{}
+	if v, ok := filters["search"]; ok && v != "" {
+		where = append(where, "name LIKE ?")
+		args = append(args, "%"+v+"%")
+	}
+
+	countQuery := fmt.Sprintf("SELECT COUNT(1) FROM categories WHERE %s", strings.Join(where, " AND "))
+	var total int
+	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	if limit <= 0 {
+		limit = 10
+	}
+	if page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	listQuery := fmt.Sprintf("SELECT id,name,created_at FROM categories WHERE %s ORDER BY name ASC LIMIT ? OFFSET ?", strings.Join(where, " AND "))
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(listQuery, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	out := []*models.Category{}
 	for rows.Next() {
 		c := &models.Category{}
 		if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, c)
 	}
-	return out, nil
+	return out, total, nil
 }

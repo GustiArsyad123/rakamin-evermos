@@ -21,10 +21,8 @@ func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
 	uc := NewUsecase(repo)
 	// create product requires authentication
 	r.Handle("/api/v1/products", middleware.JWTAuth(makeCreateHandler(uc))).Methods("POST")
-	r.HandleFunc("/api/v1/products", makeListHandler(uc)).Methods("GET")
-	r.HandleFunc("/api/v1/products/{id}", makeGetHandler(uc)).Methods("GET")
-	// store management
-	r.Handle("/api/v1/stores/{id}", middleware.JWTAuth(makeUpdateStoreHandler(uc))).Methods("PUT")
+	r.Handle("/api/v1/products", middleware.JWTAuth(makeListHandler(uc))).Methods("GET")
+	r.Handle("/api/v1/products/{id}", middleware.JWTAuth(makeGetHandler(uc))).Methods("GET")
 }
 
 func makeCreateHandler(uc Usecase) http.HandlerFunc {
@@ -84,6 +82,13 @@ func makeCreateHandler(uc Usecase) http.HandlerFunc {
 
 func makeListHandler(uc Usecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// user id from context (set by middleware)
+		uid, ok := middleware.GetUserID(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		q := r.URL.Query()
 		filters := map[string]string{}
 		if v := q.Get("search"); v != "" {
@@ -91,9 +96,6 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 		}
 		if v := q.Get("category_id"); v != "" {
 			filters["category_id"] = v
-		}
-		if v := q.Get("store_id"); v != "" {
-			filters["store_id"] = v
 		}
 		if v := q.Get("min_price"); v != "" {
 			filters["min_price"] = v
@@ -115,7 +117,7 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 			}
 		}
 
-		data, total, err := uc.ListProducts(filters, page, limit)
+		data, total, err := uc.ListProducts(uid, filters, page, limit)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -130,10 +132,17 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 
 func makeGetHandler(uc Usecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// user id from context (set by middleware)
+		uid, ok := middleware.GetUserID(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, _ := strconv.ParseInt(idStr, 10, 64)
-		p, err := uc.GetProduct(id)
+		p, err := uc.GetProduct(uid, id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -143,38 +152,5 @@ func makeGetHandler(uc Usecase) http.HandlerFunc {
 			return
 		}
 		json.NewEncoder(w).Encode(p)
-	}
-}
-
-func makeUpdateStoreHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		uid, ok := middleware.GetUserID(r)
-		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		vars := mux.Vars(r)
-		idStr := vars["id"]
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		var req struct {
-			Name string `json:"name"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
-			return
-		}
-		if err := uc.UpdateStore(uid, id, req.Name); err != nil {
-			if err.Error() == "forbidden" {
-				http.Error(w, err.Error(), http.StatusForbidden)
-			} else {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-			}
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
 	}
 }

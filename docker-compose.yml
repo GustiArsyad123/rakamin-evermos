@@ -77,5 +77,21 @@ services:
       db:
         condition: service_healthy
 
+  address:
+    build:
+      context: .
+      dockerfile: cmd/address/Dockerfile
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASSWORD}
+      DB_NAME: ${DB_DATABASE}
+    ports:
+      - "8083:8083"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   db_data:

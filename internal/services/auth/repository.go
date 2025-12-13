@@ -2,6 +2,7 @@ package auth
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/example/ms-ecommerce/internal/pkg/models"
@@ -9,8 +10,11 @@ import (
 
 type Repository interface {
 	CreateUser(user *models.User) (int64, error)
+	CreateStore(userID int64, name string) error
 	GetUserByEmail(email string) (*models.User, error)
+	GetUserByPhone(phone string) (*models.User, error)
 	UpdatePassword(userID int64, hashed string) error
+	UpdateUser(id int64, name, phone, role *string) error
 	GetUserByID(id int64) (*models.User, error)
 	// ListUsers returns a page of users and the total count. If search is non-empty,
 	// it filters by name or email containing the search term.
@@ -37,14 +41,30 @@ func (r *mysqlRepo) CreateUser(user *models.User) (int64, error) {
 		return 0, err
 	}
 	id, _ := res.LastInsertId()
-	// create store automatically
-	_, _ = r.db.Exec("INSERT INTO stores (user_id,name) VALUES (?,?)", id, user.Name+"'s store")
 	return id, nil
+}
+
+func (r *mysqlRepo) CreateStore(userID int64, name string) error {
+	_, err := r.db.Exec("INSERT INTO stores (user_id,name) VALUES (?,?)", userID, name)
+	return err
 }
 
 func (r *mysqlRepo) GetUserByEmail(email string) (*models.User, error) {
 	u := &models.User{}
 	row := r.db.QueryRow("SELECT id,name,email,phone,password,role,created_at FROM users WHERE email = ?", email)
+	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.Password, &u.Role, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+func (r *mysqlRepo) GetUserByPhone(phone string) (*models.User, error) {
+	u := &models.User{}
+	row := r.db.QueryRow("SELECT id,name,email,phone,password,role,created_at FROM users WHERE phone = ?", phone)
 	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.Password, &u.Role, &u.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -70,6 +90,31 @@ func (r *mysqlRepo) GetUserByID(id int64) (*models.User, error) {
 		return nil, err
 	}
 	return u, nil
+}
+
+func (r *mysqlRepo) UpdateUser(id int64, name, phone, role *string) error {
+	// Build dynamic update
+	sets := []string{}
+	args := []interface{}{}
+	if name != nil {
+		sets = append(sets, "name = ?")
+		args = append(args, *name)
+	}
+	if phone != nil {
+		sets = append(sets, "phone = ?")
+		args = append(args, *phone)
+	}
+	if role != nil {
+		sets = append(sets, "role = ?")
+		args = append(args, *role)
+	}
+	if len(sets) == 0 {
+		return nil
+	}
+	args = append(args, id)
+	q := "UPDATE users SET " + strings.Join(sets, ", ") + " WHERE id = ?"
+	_, err := r.db.Exec(q, args...)
+	return err
 }
 
 func (r *mysqlRepo) ListUsers(page, limit int, search string) ([]*models.User, int, error) {
