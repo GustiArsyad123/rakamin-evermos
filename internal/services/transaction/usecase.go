@@ -9,8 +9,8 @@ import (
 
 type Usecase interface {
 	Create(userID int64, addressID int64, items []ItemReq) (int64, error)
-	Get(userID, id int64) (*models.Transaction, []*models.ProductLog, error)
-	List(userID int64, filters map[string]string, page, limit int) ([]*models.Transaction, int, error)
+	Get(userID, id int64, role string) (*models.Transaction, []*models.ProductLog, error)
+	List(userID int64, role string, filters map[string]string, page, limit int) ([]*models.Transaction, int, error)
 }
 
 type ItemReq struct {
@@ -79,18 +79,22 @@ func (u *txnUsecase) Create(userID int64, addressID int64, items []ItemReq) (int
 	return id, nil
 }
 
-func (u *txnUsecase) Get(userID, id int64) (*models.Transaction, []*models.ProductLog, error) {
+func (u *txnUsecase) Get(userID, id int64, role string) (*models.Transaction, []*models.ProductLog, error) {
 	t, logs, err := u.repo.GetByID(id)
 	if err != nil || t == nil {
 		return t, logs, err
 	}
-	// Skip ownership check if userID == 0 (for testing without auth)
-	if userID != 0 && t.UserID != userID {
+	if role != "admin" && t.UserID != userID {
 		return nil, nil, errors.New("forbidden")
 	}
 	return t, logs, nil
 }
 
-func (u *txnUsecase) List(userID int64, filters map[string]string, page, limit int) ([]*models.Transaction, int, error) {
-	return u.repo.ListByUser(userID, filters, page, limit)
+func (u *txnUsecase) List(userID int64, role string, filters map[string]string, page, limit int) ([]*models.Transaction, int, error) {
+	// If admin, list all transactions (userID=0), else list user's transactions
+	listUserID := userID
+	if role == "admin" {
+		listUserID = 0
+	}
+	return u.repo.ListByUser(listUserID, filters, page, limit)
 }

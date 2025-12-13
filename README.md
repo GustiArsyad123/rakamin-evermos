@@ -241,18 +241,18 @@ Base URLs when running locally via Docker Compose:
 - GET /api/v1/stores/{id}
 
   - Headers: `Authorization: Bearer <token>`
-  - Response: store object (owner only)
+  - Response: store object (owner or admin)
 
 - PUT /api/v1/stores/{id}
 
   - Headers: `Authorization: Bearer <token>`
   - Body (JSON): { "name": string }
-  - Response: 204 No Content (owner only)
+  - Response: 204 No Content (owner or admin)
 
 - DELETE /api/v1/stores/{id}
 
   - Headers: `Authorization: Bearer <token>`
-  - Response: 204 No Content (owner only)
+  - Response: 204 No Content (owner or admin)
 
 ### 3. File
 
@@ -289,14 +289,20 @@ Base URLs when running locally via Docker Compose:
 
   - Headers: `Authorization: Bearer <token>`
   - Response: product object
-  - Notes: Owner-only
+  - Notes: Owner or admin
 
-- PUT /api/v1/stores/:id
+- PUT /api/v1/products/:id
 
   - Headers: `Authorization: Bearer <token>`
-  - Body (JSON): { "name": string }
+  - Body (JSON): { "name": string, "description": string, "price": float, "stock": int, "category_id": int64 }
   - Response: 204 No Content
-  - Notes: Owner-only
+  - Notes: Owner or admin
+
+- DELETE /api/v1/products/:id
+
+  - Headers: `Authorization: Bearer <token>`
+  - Response: 204 No Content
+  - Notes: Owner or admin
 
 ### 3. Address
 
@@ -316,20 +322,20 @@ Base URLs when running locally via Docker Compose:
 
   - Headers: `Authorization: Bearer <token>`
   - Response: address object
-  - Notes: Owner-only
+  - Notes: Owner or admin
 
 - PUT /api/v1/addresses/:id
 
   - Headers: `Authorization: Bearer <token>`
   - Body (JSON): { "label": string, "address": string, "city": string, "postal_code": string }
   - Response: 204 No Content
-  - Notes: Owner-only
+  - Notes: Owner or admin
 
 - DELETE /api/v1/addresses/:id
 
   - Headers: `Authorization: Bearer <token>`
   - Response: 204 No Content
-  - Notes: Owner-only
+  - Notes: Owner or admin
 
 ### 5. Category
 
@@ -376,10 +382,12 @@ Base URLs when running locally via Docker Compose:
   - Headers: `Authorization: Bearer <token>`
   - Query params: `page` (int), `limit` (int), `status` (string), `store_id` (int), `min_total` (float), `max_total` (float)
   - Response: { "data": [...], "pagination": { "page": int, "limit": int, "total": int } }
+  - Notes: Lists user's transactions (admins see all)
 
 - GET /api/v1/transactions/:id
   - Headers: `Authorization: Bearer <token>`
   - Response: { "transaction": {...}, "logs": [...] }
+  - Notes: Owner or admin
 
 ### Examples — Filtered Requests
 

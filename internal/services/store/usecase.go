@@ -8,9 +8,9 @@ import (
 
 type Usecase interface {
 	CreateStore(userID int64, name string) (int64, error)
-	GetStore(userID, storeID int64) (*models.Store, error)
-	UpdateStore(userID, storeID int64, name string) error
-	DeleteStore(userID, storeID int64) error
+	GetStore(requesterID, storeID int64, requesterRole string) (*models.Store, error)
+	UpdateStore(requesterID, storeID int64, requesterRole, name string) error
+	DeleteStore(requesterID, storeID int64, requesterRole string) error
 }
 
 type storeUsecase struct {
@@ -34,35 +34,44 @@ func (u *storeUsecase) CreateStore(userID int64, name string) (int64, error) {
 	return u.repo.Create(s)
 }
 
-func (u *storeUsecase) GetStore(userID, storeID int64) (*models.Store, error) {
+func (u *storeUsecase) GetStore(requesterID, storeID int64, requesterRole string) (*models.Store, error) {
 	s, err := u.repo.GetByID(storeID)
 	if err != nil {
 		return nil, err
 	}
-	if s.UserID != userID {
-		return nil, errors.New("unauthorized")
+	if s == nil {
+		return nil, nil
+	}
+	if requesterRole != "admin" && s.UserID != requesterID {
+		return nil, errors.New("forbidden")
 	}
 	return s, nil
 }
 
-func (u *storeUsecase) UpdateStore(userID, storeID int64, name string) error {
+func (u *storeUsecase) UpdateStore(requesterID, storeID int64, requesterRole, name string) error {
 	s, err := u.repo.GetByID(storeID)
 	if err != nil {
 		return err
 	}
-	if s.UserID != userID {
-		return errors.New("unauthorized")
+	if s == nil {
+		return errors.New("not found")
+	}
+	if requesterRole != "admin" && s.UserID != requesterID {
+		return errors.New("forbidden")
 	}
 	return u.repo.Update(storeID, name)
 }
 
-func (u *storeUsecase) DeleteStore(userID, storeID int64) error {
+func (u *storeUsecase) DeleteStore(requesterID, storeID int64, requesterRole string) error {
 	s, err := u.repo.GetByID(storeID)
 	if err != nil {
 		return err
 	}
-	if s.UserID != userID {
-		return errors.New("unauthorized")
+	if s == nil {
+		return errors.New("not found")
+	}
+	if requesterRole != "admin" && s.UserID != requesterID {
+		return errors.New("forbidden")
 	}
 	return u.repo.Delete(storeID)
 }

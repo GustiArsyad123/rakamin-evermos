@@ -16,9 +16,8 @@ func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
 	uc := NewUsecase(repo, dbConn)
 	// transactions require auth
 	r.Handle("/api/v1/transactions", middleware.JWTAuth(makeCreateHandler(uc))).Methods("POST")
-	// WARNING: Removing auth for testing - restore middleware.JWTAuth in production
-	r.Handle("/api/v1/transactions", makeListHandler(uc)).Methods("GET")
-	r.Handle("/api/v1/transactions/{id}", makeGetHandler(uc)).Methods("GET")
+	r.Handle("/api/v1/transactions", middleware.JWTAuth(makeListHandler(uc))).Methods("GET")
+	r.Handle("/api/v1/transactions/{id}", middleware.JWTAuth(makeGetHandler(uc))).Methods("GET")
 }
 
 func makeCreateHandler(uc Usecase) http.HandlerFunc {
@@ -51,12 +50,12 @@ func makeCreateHandler(uc Usecase) http.HandlerFunc {
 
 func makeListHandler(uc Usecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// WARNING: Removed auth check for testing - restore in production
-		// uid, ok := middleware.GetUserID(r)
-		// if !ok {
-		// 	http.Error(w, "unauthorized", http.StatusUnauthorized)
-		// 	return
-		// }
+		uid, ok := middleware.GetUserID(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		role, _ := middleware.GetRole(r)
 		q := r.URL.Query()
 		filters := map[string]string{}
 		if v := q.Get("status"); v != "" {
@@ -84,8 +83,7 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 				limit = li
 			}
 		}
-		// Pass 0 to list all transactions for testing
-		data, total, err := uc.List(0, filters, page, limit)
+		data, total, err := uc.List(uid, role, filters, page, limit)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -96,19 +94,22 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 
 func makeGetHandler(uc Usecase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// WARNING: Removed auth check for testing - restore in production
-		// uid, ok := middleware.GetUserID(r)
-		// if !ok {
-		// 	http.Error(w, "unauthorized", http.StatusUnauthorized)
-		// 	return
-		// }
+		uid, ok := middleware.GetUserID(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		role, _ := middleware.GetRole(r)
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, _ := strconv.ParseInt(idStr, 10, 64)
-		// Pass 0 to skip ownership check for testing
-		t, logs, err := uc.Get(0, id)
+		t, logs, err := uc.Get(uid, id, role)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusForbidden)
+			if err.Error() == "forbidden" {
+				http.Error(w, err.Error(), http.StatusForbidden)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		if t == nil {

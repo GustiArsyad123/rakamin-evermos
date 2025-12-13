@@ -11,6 +11,8 @@ type Usecase interface {
 	CreateProduct(userID int64, p *models.Product) (int64, error)
 	ListProducts(userID int64, filters map[string]string, page, limit int) ([]*models.Product, int, error)
 	GetProduct(userID, id int64) (*models.Product, error)
+	UpdateProduct(userID, id int64, name, description string, price float64, stock int, categoryID *int64) error
+	DeleteProduct(userID, id int64) error
 }
 
 type productUsecase struct {
@@ -58,4 +60,46 @@ func (u *productUsecase) GetProduct(userID, id int64) (*models.Product, error) {
 		return nil, errors.New("unauthorized")
 	}
 	return p, nil
+}
+
+func (u *productUsecase) UpdateProduct(userID, id int64, name, description string, price float64, stock int, categoryID *int64) error {
+	// find store id by user
+	var storeID int64
+	row := u.repo.(*mysqlRepo).db.QueryRow("SELECT id FROM stores WHERE user_id = ?", userID)
+	if err := row.Scan(&storeID); err != nil {
+		return err
+	}
+	// check ownership
+	p, err := u.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if p == nil {
+		return errors.New("not found")
+	}
+	if p.StoreID != storeID {
+		return errors.New("forbidden")
+	}
+	return u.repo.Update(id, name, description, price, stock, categoryID)
+}
+
+func (u *productUsecase) DeleteProduct(userID, id int64) error {
+	// find store id by user
+	var storeID int64
+	row := u.repo.(*mysqlRepo).db.QueryRow("SELECT id FROM stores WHERE user_id = ?", userID)
+	if err := row.Scan(&storeID); err != nil {
+		return err
+	}
+	// check ownership
+	p, err := u.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if p == nil {
+		return errors.New("not found")
+	}
+	if p.StoreID != storeID {
+		return errors.New("forbidden")
+	}
+	return u.repo.Delete(id)
 }

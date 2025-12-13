@@ -97,6 +97,7 @@ func makeGetHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -104,7 +105,7 @@ func makeGetHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		a, err := uc.GetAddress(uid, id)
+		a, err := uc.GetAddress(uid, id, role)
 		if err != nil {
 			if err.Error() == "forbidden" {
 				http.Error(w, err.Error(), http.StatusForbidden)
@@ -128,6 +129,7 @@ func makeUpdateHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -145,7 +147,7 @@ func makeUpdateHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "invalid body", http.StatusBadRequest)
 			return
 		}
-		err = uc.UpdateAddress(uid, id, req.Label, req.Address, req.City, req.PostalCode)
+		err = uc.UpdateAddress(uid, id, role, req.Label, req.Address, req.City, req.PostalCode)
 		if err != nil {
 			if err.Error() == "forbidden" {
 				http.Error(w, err.Error(), http.StatusForbidden)
@@ -167,6 +169,7 @@ func makeDeleteHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -174,7 +177,7 @@ func makeDeleteHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		err = uc.DeleteAddress(uid, id)
+		err = uc.DeleteAddress(uid, id, role)
 		if err != nil {
 			if err.Error() == "forbidden" {
 				http.Error(w, err.Error(), http.StatusForbidden)

@@ -12,6 +12,8 @@ type Repository interface {
 	Create(p *models.Product) (int64, error)
 	List(filters map[string]string, page, limit int) ([]*models.Product, int, error)
 	GetByID(id int64) (*models.Product, error)
+	Update(id int64, name, description string, price float64, stock int, categoryID *int64) error
+	Delete(id int64) error
 }
 
 type mysqlRepo struct {
@@ -59,6 +61,28 @@ func (r *mysqlRepo) GetByID(id int64) (*models.Product, error) {
 		p.CategoryID = &v
 	}
 	return p, nil
+}
+
+func (r *mysqlRepo) Update(id int64, name, description string, price float64, stock int, categoryID *int64) error {
+	// if a category id is provided, ensure it exists to avoid FK errors
+	if categoryID != nil {
+		var exists int
+		err := r.db.QueryRow("SELECT 1 FROM categories WHERE id = ?", *categoryID).Scan(&exists)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return fmt.Errorf("category %d not found", *categoryID)
+			}
+			return err
+		}
+	}
+	_, err := r.db.Exec("UPDATE products SET category_id=?, name=?, description=?, price=?, stock=? WHERE id=?",
+		categoryID, name, description, price, stock, id)
+	return err
+}
+
+func (r *mysqlRepo) Delete(id int64) error {
+	_, err := r.db.Exec("DELETE FROM products WHERE id=?", id)
+	return err
 }
 
 func (r *mysqlRepo) List(filters map[string]string, page, limit int) ([]*models.Product, int, error) {

@@ -50,6 +50,7 @@ func makeGetHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -57,9 +58,17 @@ func makeGetHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		s, err := uc.GetStore(uid, id)
+		s, err := uc.GetStore(uid, id, role)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			if err.Error() == "forbidden" {
+				http.Error(w, err.Error(), http.StatusForbidden)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		if s == nil {
+			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		json.NewEncoder(w).Encode(s)
@@ -73,6 +82,7 @@ func makeUpdateHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -87,8 +97,14 @@ func makeUpdateHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "invalid body", http.StatusBadRequest)
 			return
 		}
-		if err := uc.UpdateStore(uid, id, req.Name); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err := uc.UpdateStore(uid, id, role, req.Name); err != nil {
+			if err.Error() == "forbidden" {
+				http.Error(w, err.Error(), http.StatusForbidden)
+			} else if err.Error() == "not found" {
+				http.Error(w, err.Error(), http.StatusNotFound)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -102,6 +118,7 @@ func makeDeleteHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		role, _ := middleware.GetRole(r)
 		vars := mux.Vars(r)
 		idStr := vars["id"]
 		id, err := strconv.ParseInt(idStr, 10, 64)
@@ -109,8 +126,14 @@ func makeDeleteHandler(uc Usecase) http.HandlerFunc {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		if err := uc.DeleteStore(uid, id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err := uc.DeleteStore(uid, id, role); err != nil {
+			if err.Error() == "forbidden" {
+				http.Error(w, err.Error(), http.StatusForbidden)
+			} else if err.Error() == "not found" {
+				http.Error(w, err.Error(), http.StatusNotFound)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

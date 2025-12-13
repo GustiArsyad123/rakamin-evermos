@@ -23,6 +23,8 @@ func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
 	r.Handle("/api/v1/products", middleware.JWTAuth(makeCreateHandler(uc))).Methods("POST")
 	r.Handle("/api/v1/products", middleware.JWTAuth(makeListHandler(uc))).Methods("GET")
 	r.Handle("/api/v1/products/{id}", middleware.JWTAuth(makeGetHandler(uc))).Methods("GET")
+	r.Handle("/api/v1/products/{id}", middleware.JWTAuth(makeUpdateHandler(uc))).Methods("PUT")
+	r.Handle("/api/v1/products/{id}", middleware.JWTAuth(makeDeleteHandler(uc))).Methods("DELETE")
 }
 
 func makeCreateHandler(uc Usecase) http.HandlerFunc {
@@ -152,5 +154,77 @@ func makeGetHandler(uc Usecase) http.HandlerFunc {
 			return
 		}
 		json.NewEncoder(w).Encode(p)
+	}
+}
+
+func makeUpdateHandler(uc Usecase) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// user id from context (set by middleware)
+		uid, ok := middleware.GetUserID(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		vars := mux.Vars(r)
+		idStr := vars["id"]
+		id, _ := strconv.ParseInt(idStr, 10, 64)
+
+		var req struct {
+			Name        string  `json:"name"`
+			Description string  `json:"description"`
+			Price       float64 `json:"price"`
+			Stock       int     `json:"stock"`
+			CategoryID  *int64  `json:"category_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		if req.Name == "" {
+			http.Error(w, "name required", http.StatusBadRequest)
+			return
+		}
+
+		err := uc.UpdateProduct(uid, id, req.Name, req.Description, req.Price, req.Stock, req.CategoryID)
+		if err != nil {
+			if err.Error() == "forbidden" {
+				http.Error(w, err.Error(), http.StatusForbidden)
+			} else if err.Error() == "not found" {
+				http.Error(w, err.Error(), http.StatusNotFound)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func makeDeleteHandler(uc Usecase) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// user id from context (set by middleware)
+		uid, ok := middleware.GetUserID(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		vars := mux.Vars(r)
+		idStr := vars["id"]
+		id, _ := strconv.ParseInt(idStr, 10, 64)
+
+		err := uc.DeleteProduct(uid, id)
+		if err != nil {
+			if err.Error() == "forbidden" {
+				http.Error(w, err.Error(), http.StatusForbidden)
+			} else if err.Error() == "not found" {
+				http.Error(w, err.Error(), http.StatusNotFound)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
