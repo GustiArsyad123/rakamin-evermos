@@ -14,6 +14,31 @@ Included:
 - `docker-compose.yml` with MySQL
 - `sql/schema.sql` with tables and constraints
 
+## Technology Stack
+
+### Core Technologies
+
+- **Go**: 1.24.0 - Programming language
+- **Gin Framework**: 1.11.0 - HTTP web framework (migrated from gorilla/mux for better performance)
+- **MySQL**: 8.0+ - Primary database with connection pooling
+- **Redis**: 7+ - In-memory caching layer
+
+### Libraries & Dependencies
+
+- **JWT**: golang-jwt/jwt/v5 v5.0.0 - JSON Web Token authentication
+- **MySQL Driver**: go-sql-driver/mysql v1.6.0 - Database connectivity
+- **Prometheus Client**: prometheus/client_golang v1.23.2 - Metrics collection and monitoring
+- **Redis Client**: redis/go-redis/v9 v9.17.2 - Redis connectivity with connection pooling
+- **Crypto Library**: golang.org/x/crypto v0.46.0 - Cryptographic functions and password hashing
+- **Time Utilities**: golang.org/x/time v0.14.0 - Advanced time and rate limiting utilities
+
+### Infrastructure & DevOps
+
+- **Docker**: Containerization platform
+- **Docker Compose**: Multi-container orchestration
+- **Kubernetes**: Production container orchestration with auto-scaling
+- **Nginx**: Reverse proxy, load balancing, and API gateway
+
 Run (development):
 
 1. Start MySQL with Docker Compose:
@@ -28,6 +53,45 @@ docker compose up -d
 cd cmd/auth
 go run main.go
 ```
+
+### Running All Services Simultaneously
+
+For development convenience, you can run all microservices at once using the provided script:
+
+```bash
+# Run all services in parallel (auth, product, transaction, address, store, file)
+./run-services.sh
+```
+
+This script will:
+
+- Start all 6 microservices in the background
+- Display the process IDs (PIDs) for each service
+- Show which ports each service is running on
+
+### Stopping Services
+
+To stop all running services:
+
+```bash
+# Method 1: Press Ctrl+C in the terminal running the script
+# Method 2: Kill all Go processes
+killall main
+
+# Method 3: Kill specific service by port (example for auth service on port 8080)
+lsof -ti:8080 | xargs kill
+```
+
+### Service Ports
+
+Each microservice runs on a dedicated port:
+
+- **Auth Service** (includes category routes): `8080`
+- **Product Service**: `8081`
+- **Transaction Service**: `8082`
+- **Address Service**: `8083`
+- **Store Service**: `8084`
+- **File Service**: `8085`
 
 API endpoints (auth service)
 
