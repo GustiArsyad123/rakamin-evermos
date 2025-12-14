@@ -79,7 +79,24 @@ func makeCreateHandler(uc Usecase) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, map[string]interface{}{"id": id})
+
+		// Fetch the created product to return complete data
+		createdProduct, err := uc.GetProduct(uid, role, id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "product created but failed to retrieve"})
+			return
+		}
+
+		c.JSON(http.StatusCreated, gin.H{
+			"id":          createdProduct.ID,
+			"name":        createdProduct.Name,
+			"description": createdProduct.Description,
+			"price":       createdProduct.Price,
+			"stock":       createdProduct.Stock,
+			"category_id": createdProduct.CategoryID,
+			"image":       createdProduct.ImageURL,
+			"created_at":  createdProduct.CreatedAt,
+		})
 	}
 }
 
@@ -168,8 +185,7 @@ func makeUpdateHandler(uc Usecase) gin.HandlerFunc {
 		}
 		role, _ := middleware.GinGetRole(c)
 
-		idStr := c.Param("id")
-		id, _ := strconv.ParseInt(idStr, 10, 64)
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 
 		var req struct {
 			Name        string  `json:"name"`
@@ -212,8 +228,7 @@ func makeDeleteHandler(uc Usecase) gin.HandlerFunc {
 		}
 		role, _ := middleware.GinGetRole(c)
 
-		idStr := c.Param("id")
-		id, _ := strconv.ParseInt(idStr, 10, 64)
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 
 		err := uc.DeleteProduct(uid, role, id)
 		if err != nil {
