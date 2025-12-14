@@ -1,7 +1,6 @@
 package product
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,41 +13,41 @@ import (
 	"github.com/example/ms-ecommerce/internal/pkg/cache"
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
 	"github.com/example/ms-ecommerce/internal/pkg/models"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *mux.Router, dbConn *sql.DB, productCache *cache.ProductCache) {
+func RegisterRoutes(r *gin.Engine, dbConn *sql.DB, productCache *cache.ProductCache) {
 	repo := NewRepo(dbConn, productCache)
 	uc := NewUsecase(repo)
 	// create product requires authentication
-	r.Handle("/api/v1/products", middleware.JWTAuth(makeCreateHandler(uc))).Methods("POST")
-	r.Handle("/api/v1/products", middleware.JWTAuth(makeListHandler(uc))).Methods("GET")
-	r.Handle("/api/v1/products/{id}", middleware.JWTAuth(makeGetHandler(uc))).Methods("GET")
-	r.Handle("/api/v1/products/{id}", middleware.JWTAuth(makeUpdateHandler(uc))).Methods("PUT")
-	r.Handle("/api/v1/products/{id}", middleware.JWTAuth(makeDeleteHandler(uc))).Methods("DELETE")
+	r.POST("/api/v1/products", middleware.GinJWTAuth(), makeCreateHandler(uc))
+	r.GET("/api/v1/products", middleware.GinJWTAuth(), makeListHandler(uc))
+	r.GET("/api/v1/products/:id", middleware.GinJWTAuth(), makeGetHandler(uc))
+	r.PUT("/api/v1/products/:id", middleware.GinJWTAuth(), makeUpdateHandler(uc))
+	r.DELETE("/api/v1/products/:id", middleware.GinJWTAuth(), makeDeleteHandler(uc))
 }
 
-func makeCreateHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeCreateHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		// user id from context (set by middleware)
-		uid, ok := middleware.GetUserID(r)
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		role, _ := middleware.GetRole(r)
+		role, _ := middleware.GinGetRole(c)
 
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
-			http.Error(w, "invalid form", http.StatusBadRequest)
+		if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid form"})
 			return
 		}
-		name := r.FormValue("name")
-		desc := r.FormValue("description")
-		priceStr := r.FormValue("price")
-		stockStr := r.FormValue("stock")
-		catStr := r.FormValue("category_id")
+		name := c.Request.FormValue("name")
+		desc := c.Request.FormValue("description")
+		priceStr := c.Request.FormValue("price")
+		stockStr := c.Request.FormValue("stock")
+		catStr := c.Request.FormValue("category_id")
 		if name == "" || priceStr == "" {
-			http.Error(w, "missing fields", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing fields"})
 			return
 		}
 		price, _ := strconv.ParseFloat(priceStr, 64)
@@ -60,7 +59,7 @@ func makeCreateHandler(uc Usecase) http.HandlerFunc {
 		}
 
 		var imageURL string
-		file, fh, err := r.FormFile("image")
+		file, fh, err := c.Request.FormFile("image")
 		if err == nil {
 			defer file.Close()
 			os.MkdirAll("uploads", 0755)
@@ -77,46 +76,45 @@ func makeCreateHandler(uc Usecase) http.HandlerFunc {
 		p := &models.Product{Name: name, Description: desc, Price: price, Stock: stock, CategoryID: cat, ImageURL: imageURL}
 		id, err := uc.CreateProduct(uid, role, p)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{"id": id})
+		c.JSON(http.StatusOK, map[string]interface{}{"id": id})
 	}
 }
 
-func makeListHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeListHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		// user id from context (set by middleware)
-		uid, ok := middleware.GetUserID(r)
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		role, _ := middleware.GetRole(r)
+		role, _ := middleware.GinGetRole(c)
 
-		q := r.URL.Query()
 		filters := map[string]string{}
-		if v := q.Get("search"); v != "" {
+		if v := c.Query("search"); v != "" {
 			filters["search"] = v
 		}
-		if v := q.Get("category_id"); v != "" {
+		if v := c.Query("category_id"); v != "" {
 			filters["category_id"] = v
 		}
-		if v := q.Get("min_price"); v != "" {
+		if v := c.Query("min_price"); v != "" {
 			filters["min_price"] = v
 		}
-		if v := q.Get("max_price"); v != "" {
+		if v := c.Query("max_price"); v != "" {
 			filters["max_price"] = v
 		}
 
 		page := 1
 		limit := 10
-		if v := q.Get("page"); v != "" {
+		if v := c.Query("page"); v != "" {
 			if pi, err := strconv.Atoi(v); err == nil {
 				page = pi
 			}
 		}
-		if v := q.Get("limit"); v != "" {
+		if v := c.Query("limit"); v != "" {
 			if li, err := strconv.Atoi(v); err == nil {
 				limit = li
 			}
@@ -124,55 +122,53 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 
 		data, total, err := uc.ListProducts(uid, role, filters, page, limit)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		resp := map[string]interface{}{
 			"data":       data,
 			"pagination": map[string]interface{}{"page": page, "limit": limit, "total": total},
 		}
-		json.NewEncoder(w).Encode(resp)
+		c.JSON(http.StatusOK, resp)
 	}
 }
 
-func makeGetHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeGetHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		// user id from context (set by middleware)
-		uid, ok := middleware.GetUserID(r)
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		role, _ := middleware.GetRole(r)
+		role, _ := middleware.GinGetRole(c)
 
-		vars := mux.Vars(r)
-		idStr := vars["id"]
+		idStr := c.Param("id")
 		id, _ := strconv.ParseInt(idStr, 10, 64)
 		p, err := uc.GetProduct(uid, role, id)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		if p == nil {
-			http.Error(w, "not found", http.StatusNotFound)
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		json.NewEncoder(w).Encode(p)
+		c.JSON(http.StatusOK, p)
 	}
 }
 
-func makeUpdateHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeUpdateHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		// user id from context (set by middleware)
-		uid, ok := middleware.GetUserID(r)
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		role, _ := middleware.GetRole(r)
+		role, _ := middleware.GinGetRole(c)
 
-		vars := mux.Vars(r)
-		idStr := vars["id"]
+		idStr := c.Param("id")
 		id, _ := strconv.ParseInt(idStr, 10, 64)
 
 		var req struct {
@@ -182,55 +178,54 @@ func makeUpdateHandler(uc Usecase) http.HandlerFunc {
 			Stock       int     `json:"stock"`
 			CategoryID  *int64  `json:"category_id"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		if req.Name == "" {
-			http.Error(w, "name required", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
 			return
 		}
 
 		err := uc.UpdateProduct(uid, role, id, req.Name, req.Description, req.Price, req.Stock, req.CategoryID)
 		if err != nil {
 			if err.Error() == "forbidden" {
-				http.Error(w, err.Error(), http.StatusForbidden)
+				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			} else if err.Error() == "not found" {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			} else {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			}
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		c.Status(http.StatusNoContent)
 	}
 }
 
-func makeDeleteHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeDeleteHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		// user id from context (set by middleware)
-		uid, ok := middleware.GetUserID(r)
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		role, _ := middleware.GetRole(r)
+		role, _ := middleware.GinGetRole(c)
 
-		vars := mux.Vars(r)
-		idStr := vars["id"]
+		idStr := c.Param("id")
 		id, _ := strconv.ParseInt(idStr, 10, 64)
 
 		err := uc.DeleteProduct(uid, role, id)
 		if err != nil {
 			if err.Error() == "forbidden" {
-				http.Error(w, err.Error(), http.StatusForbidden)
+				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			} else if err.Error() == "not found" {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			} else {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			}
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		c.Status(http.StatusNoContent)
 	}
 }

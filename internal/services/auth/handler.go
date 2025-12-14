@@ -2,7 +2,6 @@ package auth
 
 import (
 	"database/sql"
-	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -11,73 +10,70 @@ import (
 
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
 	"github.com/example/ms-ecommerce/internal/pkg/models"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
+func RegisterRoutes(r *gin.Engine, dbConn *sql.DB) {
 	repo := NewRepo(dbConn)
 	uc := NewUsecase(repo)
-	r.HandleFunc("/api/v1/auth/register", makeRegisterHandler(uc)).Methods("POST")
+	r.POST("/api/v1/auth/register", makeRegisterHandler(uc))
 	log.Printf("registered POST /api/v1/auth/register")
-	r.HandleFunc("/api/v1/auth/login", makeLoginHandler(uc)).Methods("POST")
+	r.POST("/api/v1/auth/login", makeLoginHandler(uc))
 	log.Printf("registered POST /api/v1/auth/login")
-	r.HandleFunc("/api/v1/auth/forgot-password", makeForgotHandler(uc)).Methods("POST")
+	r.POST("/api/v1/auth/forgot-password", makeForgotHandler(uc))
 	log.Printf("registered POST /api/v1/auth/forgot-password")
-	r.HandleFunc("/api/v1/auth/reset-password", makeResetHandler(uc)).Methods("POST")
+	r.POST("/api/v1/auth/reset-password", makeResetHandler(uc))
 	log.Printf("registered POST /api/v1/auth/reset-password")
-	r.HandleFunc("/api/v1/auth/sso/google", makeSSOHandler(uc)).Methods("POST")
+	r.POST("/api/v1/auth/sso/google", makeSSOHandler(uc))
 	log.Printf("registered POST /api/v1/auth/sso/google")
-	r.HandleFunc("/api/v1/auth/refresh", makeRefreshHandler(uc)).Methods("POST")
+	r.POST("/api/v1/auth/refresh", makeRefreshHandler(uc))
 	log.Printf("registered POST /api/v1/auth/refresh")
-	r.HandleFunc("/api/v1/auth/logout", makeRevokeHandler(uc)).Methods("POST")
+	r.POST("/api/v1/auth/logout", makeRevokeHandler(uc))
 	log.Printf("registered POST /api/v1/auth/logout")
 	// revoke all tokens (self) or admin revoke for a user
-	r.Handle("/api/v1/auth/logout/all", middleware.JWTAuth(makeRevokeAllHandler(uc))).Methods("POST")
+	r.POST("/api/v1/auth/logout/all", middleware.GinJWTAuth(), makeRevokeAllHandler(uc))
 	log.Printf("registered POST /api/v1/auth/logout/all")
 	// Admin-only list users (register both trailing and non-trailing variants)
-	usersHandler := middleware.JWTAuth(middleware.RequireRole("admin")(makeListUsersHandler(uc)))
-	r.Handle("/api/v1/auth/users", usersHandler).Methods("GET")
-	r.Handle("/api/v1/auth/users/", usersHandler).Methods("GET")
+	r.GET("/api/v1/auth/users", middleware.GinJWTAuth(), middleware.GinRequireRole("admin"), makeListUsersHandler(uc))
+	r.GET("/api/v1/auth/users/", middleware.GinJWTAuth(), middleware.GinRequireRole("admin"), makeListUsersHandler(uc))
 	log.Printf("registered GET /api/v1/auth/users and /api/v1/auth/users/")
 	// Get user by id: requires JWT; allowed if admin or owner
-	// Keep this under the auth prefix for consistency with other auth routes
-	//r.Handle("/api/v1/auth/users/{id}", middleware.JWTAuth(makeGetUserHandler(uc))).Methods("GET")
-	r.Handle("/api/v1/auth/users/{id}", middleware.JWTAuth(makeGetUserHandler(uc))).Methods("GET")
-	log.Printf("registered GET /api/v1/auth/users/{id}")
+	r.GET("/api/v1/auth/users/:id", middleware.GinJWTAuth(), makeGetUserHandler(uc))
+	log.Printf("registered GET /api/v1/auth/users/:id")
 	// Update user (owner or admin). Admin may change role.
-	r.Handle("/api/v1/auth/users/{id}", middleware.JWTAuth(makeUpdateUserHandler(uc))).Methods("PUT")
-	log.Printf("registered PUT /api/v1/auth/users/{id}")
+	r.PUT("/api/v1/auth/users/:id", middleware.GinJWTAuth(), makeUpdateUserHandler(uc))
+	log.Printf("registered PUT /api/v1/auth/users/:id")
 }
 
-func makeRegisterHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeRegisterHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req struct {
 			Name     string `json:"name"`
 			Email    string `json:"email"`
 			Phone    string `json:"phone"`
 			Password string `json:"password"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		if req.Name == "" || req.Email == "" || req.Phone == "" || req.Password == "" {
-			http.Error(w, "name, email, phone, and password are required", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name, email, phone, and password are required"})
 			return
 		}
 		u := &models.User{Name: req.Name, Email: req.Email, Phone: req.Phone, Password: req.Password}
 		token, userID, err := uc.Register(u)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		refresh, refreshExp, err := uc.IssueRefreshToken(userID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		expiresAt := time.Now().UTC().Add(1 * time.Hour)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		c.JSON(http.StatusOK, map[string]interface{}{
 			"token":              token,
 			"expires_in":         3600,
 			"expires_at":         expiresAt.Format(time.RFC3339),
@@ -87,64 +83,64 @@ func makeRegisterHandler(uc Usecase) http.HandlerFunc {
 	}
 }
 
-func makeForgotHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeForgotHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req struct {
 			Email string `json:"email"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil || req.Email == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		token, err := uc.ForgotPassword(req.Email)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		// In real app send email; for now return token so it can be used in tests/Postman
-		json.NewEncoder(w).Encode(map[string]interface{}{"reset_token": token, "expires_in": 3600})
+		c.JSON(http.StatusOK, map[string]interface{}{"reset_token": token, "expires_in": 3600})
 	}
 }
 
-func makeResetHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeResetHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req struct {
 			Token    string `json:"token"`
 			Password string `json:"password"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" || req.Password == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil || req.Token == "" || req.Password == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		if err := uc.ResetPassword(req.Token, req.Password); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		c.Status(http.StatusNoContent)
 	}
 }
 
-func makeSSOHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeSSOHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req struct {
 			IDToken string `json:"id_token"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.IDToken == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil || req.IDToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		token, userID, err := uc.SSOLogin(req.IDToken)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			return
 		}
 		refresh, refreshExp, err := uc.IssueRefreshToken(userID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		expiresAt := time.Now().UTC().Add(1 * time.Hour)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		c.JSON(http.StatusOK, map[string]interface{}{
 			"token":              token,
 			"expires_in":         3600,
 			"expires_at":         expiresAt.Format(time.RFC3339),
@@ -154,7 +150,7 @@ func makeSSOHandler(uc Usecase) http.HandlerFunc {
 	}
 }
 
-func makeLoginHandler(uc Usecase) http.HandlerFunc {
+func makeLoginHandler(uc Usecase) gin.HandlerFunc {
 	type loginRequest struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -168,24 +164,22 @@ func makeLoginHandler(uc Usecase) http.HandlerFunc {
 		RefreshExpiresAt string `json:"refresh_expires_at"`
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-
+	return func(c *gin.Context) {
 		var req loginRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 			return
 		}
 
 		token, userID, err := uc.Login(req.Email, req.Password)
 		if err != nil {
-			http.Error(w, "invalid email or password", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
 			return
 		}
 
 		refreshToken, refreshExp, err := uc.IssueRefreshToken(userID)
 		if err != nil {
-			http.Error(w, "failed to issue refresh token", http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to issue refresh token"})
 			return
 		}
 
@@ -200,27 +194,23 @@ func makeLoginHandler(uc Usecase) http.HandlerFunc {
 			RefreshExpiresAt: refreshExp.UTC().Format(time.RFC3339),
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(resp)
+		c.JSON(http.StatusOK, resp)
 	}
 }
 
-
-func makeListUsersHandler(uc Usecase) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func makeListUsersHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		// parse pagination
-		q := r.URL.Query()
 		page := 1
 		limit := 10
 		// enforce a reasonable max limit
 		const maxLimit = 100
-		if p := q.Get("page"); p != "" {
+		if p := c.Query("page"); p != "" {
 			if v, err := strconv.Atoi(p); err == nil && v > 0 {
 				page = v
 			}
 		}
-		if l := q.Get("limit"); l != "" {
+		if l := c.Query("limit"); l != "" {
 			if v, err := strconv.Atoi(l); err == nil && v > 0 {
 				limit = v
 			}
@@ -228,10 +218,10 @@ func makeListUsersHandler(uc Usecase) http.Handler {
 		if limit > maxLimit {
 			limit = maxLimit
 		}
-		search := q.Get("search")
+		search := c.Query("search")
 		users, total, err := uc.ListUsers(page, limit, search)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		resp := map[string]interface{}{
@@ -242,56 +232,54 @@ func makeListUsersHandler(uc Usecase) http.Handler {
 				"total": total,
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
-	})
+		c.JSON(http.StatusOK, resp)
+	}
 }
 
-func makeGetUserHandler(uc Usecase) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		idStr := vars["id"]
+func makeGetUserHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}
 		// permission: admin or owner
-		reqUID, ok := middleware.GetUserID(r)
-		role, _ := middleware.GetRole(r)
+		reqUID, ok := middleware.GinGetUserID(c)
+		role, _ := middleware.GinGetRole(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
 		if role != "admin" && reqUID != id {
-			http.Error(w, "forbidden", http.StatusForbidden)
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			return
 		}
 		u, err := uc.GetUserByID(id)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		if u == nil {
-			http.Error(w, "not found", http.StatusNotFound)
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		json.NewEncoder(w).Encode(u)
-	})
+		c.JSON(http.StatusOK, u)
+	}
 }
 
-func makeUpdateUserHandler(uc Usecase) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		idStr := vars["id"]
+func makeUpdateUserHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}
-		reqUID, ok := middleware.GetUserID(r)
-		role, _ := middleware.GetRole(r)
+		reqUID, ok := middleware.GinGetUserID(c)
+		role, _ := middleware.GinGetRole(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
 		var body struct {
@@ -299,39 +287,39 @@ func makeUpdateUserHandler(uc Usecase) http.Handler {
 			Phone *string `json:"phone"`
 			Role  *string `json:"role"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		// enforce authorization in usecase
 		if err := uc.UpdateUser(reqUID, id, role, body.Name, body.Phone, body.Role); err != nil {
 			if err.Error() == "forbidden" {
-				http.Error(w, "forbidden", http.StatusForbidden)
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 				return
 			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
-	})
+		c.Status(http.StatusNoContent)
+	}
 }
 
-func makeRefreshHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeRefreshHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req struct {
 			RefreshToken string `json:"refresh_token"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil || req.RefreshToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		token, refresh, refreshExp, err := uc.Refresh(req.RefreshToken)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			return
 		}
 		expiresAt := time.Now().UTC().Add(1 * time.Hour)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		c.JSON(http.StatusOK, map[string]interface{}{
 			"token":              token,
 			"expires_in":         3600,
 			"expires_at":         expiresAt.Format(time.RFC3339),
@@ -341,45 +329,45 @@ func makeRefreshHandler(uc Usecase) http.HandlerFunc {
 	}
 }
 
-func makeRevokeHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeRevokeHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req struct {
 			RefreshToken string `json:"refresh_token"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil || req.RefreshToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		if err := uc.RevokeRefreshToken(req.RefreshToken); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		c.Status(http.StatusNoContent)
 	}
 }
 
-func makeRevokeAllHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeRevokeAllHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req struct {
 			UserID *int64 `json:"user_id,omitempty"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		// must be authenticated
-		requesterID, ok := middleware.GetUserID(r)
+		requesterID, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		role, _ := middleware.GetRole(r)
+		role, _ := middleware.GinGetRole(c)
 
 		var target int64
 		if req.UserID != nil {
 			// admin may revoke for any user
 			if role != "admin" {
-				http.Error(w, "forbidden", http.StatusForbidden)
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 				return
 			}
 			target = *req.UserID
@@ -388,9 +376,9 @@ func makeRevokeAllHandler(uc Usecase) http.HandlerFunc {
 		}
 
 		if err := uc.RevokeAllRefreshTokens(target); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		c.Status(http.StatusNoContent)
 	}
 }

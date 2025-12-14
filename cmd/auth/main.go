@@ -2,13 +2,13 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/example/ms-ecommerce/internal/pkg/db"
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
 	auth "github.com/example/ms-ecommerce/internal/services/auth"
-	"github.com/gorilla/mux"
+	category "github.com/example/ms-ecommerce/internal/services/category"
+	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -24,20 +24,21 @@ func main() {
 	if err := db.EnsureAuthTables(dbConn); err != nil {
 		log.Fatalf("ensure auth tables: %v", err)
 	}
-	r := mux.NewRouter()
+	r := gin.New()
 	// attach middleware for logging and recovery to help with debugging
-	r.Use(middleware.Logging)
-	r.Use(middleware.Recover)
-	r.Use(middleware.RateLimit)
-	r.Use(middleware.MetricsMiddleware("auth"))
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
+	r.Use(middleware.GinRateLimit())
+	r.Use(middleware.GinMetricsMiddleware("auth"))
 	auth.RegisterRoutes(r, dbConn)
+	category.RegisterRoutes(r, dbConn)
 
 	// Add metrics endpoint
-	r.Path("/metrics").Handler(promhttp.Handler())
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	port := getenv("AUTH_PORT", "8080")
 	addr := ":" + port
 	log.Printf("auth service running on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, r))
+	log.Fatal(r.Run(addr))
 }
 
 func getenv(k, fallback string) string {

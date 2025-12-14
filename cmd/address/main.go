@@ -2,13 +2,12 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/example/ms-ecommerce/internal/pkg/db"
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
 	address "github.com/example/ms-ecommerce/internal/services/address"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -23,15 +22,15 @@ func main() {
 	if err := db.EnsureAuthTables(dbConn); err != nil {
 		log.Fatalf("ensure auth tables: %v", err)
 	}
-	r := mux.NewRouter()
+	r := gin.New()
 	// attach middleware for logging and recovery to help with debugging
-	r.Use(middleware.Logging)
-	r.Use(middleware.Recover)
+	r.Use(middleware.GinLogging())
+	r.Use(middleware.GinRecover())
 	address.RegisterRoutes(r, dbConn)
 	port := getenv("ADDRESS_PORT", "8083")
 	addr := ":" + port
 	log.Printf("address service running on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, r))
+	log.Fatal(r.Run(addr))
 }
 
 func getenv(k, fallback string) string {

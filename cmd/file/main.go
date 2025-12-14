@@ -2,13 +2,12 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/example/ms-ecommerce/internal/pkg/db"
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
 	file "github.com/example/ms-ecommerce/internal/services/file"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -17,14 +16,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("db connect: %v", err)
 	}
-	r := mux.NewRouter()
-	r.Use(middleware.Logging)
-	r.Use(middleware.Recover)
+	r := gin.New()
+	r.Use(middleware.GinLogging())
+	r.Use(middleware.GinRecover())
 	file.RegisterRoutes(r, dbConn)
 	port := getenv("FILE_PORT", "8085")
 	addr := ":" + port
 	log.Printf("file service running on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, r))
+	log.Fatal(r.Run(addr))
 }
 
 func getenv(k, fallback string) string {

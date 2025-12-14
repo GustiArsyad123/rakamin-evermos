@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -59,4 +60,21 @@ type metricsResponseWriter struct {
 func (rw *metricsResponseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// GinMetricsMiddleware records HTTP request metrics for Gin
+func GinMetricsMiddleware(serviceName string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+
+		// Call the next handler
+		c.Next()
+
+		// Record metrics
+		duration := time.Since(start).Seconds()
+		status := strconv.Itoa(c.Writer.Status())
+
+		httpRequestsTotal.WithLabelValues(c.Request.Method, c.Request.URL.Path, status).Inc()
+		httpRequestDuration.WithLabelValues(c.Request.Method, c.Request.URL.Path).Observe(duration)
+	}
 }

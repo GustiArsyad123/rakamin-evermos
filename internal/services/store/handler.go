@@ -1,141 +1,137 @@
 package store
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"database/sql"
 
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
+func RegisterRoutes(r *gin.Engine, dbConn *sql.DB) {
 	repo := NewRepo(dbConn)
 	uc := NewUsecase(repo)
-	r.Handle("/api/v1/stores", middleware.JWTAuth(makeCreateHandler(uc))).Methods("POST")
-	r.Handle("/api/v1/stores/{id}", middleware.JWTAuth(makeGetHandler(uc))).Methods("GET")
-	r.Handle("/api/v1/stores/{id}", middleware.JWTAuth(makeUpdateHandler(uc))).Methods("PUT")
-	r.Handle("/api/v1/stores/{id}", middleware.JWTAuth(makeDeleteHandler(uc))).Methods("DELETE")
+	r.POST("/api/v1/stores", middleware.GinJWTAuth(), makeCreateHandler(uc))
+	r.GET("/api/v1/stores/:id", middleware.GinJWTAuth(), makeGetHandler(uc))
+	r.PUT("/api/v1/stores/:id", middleware.GinJWTAuth(), makeUpdateHandler(uc))
+	r.DELETE("/api/v1/stores/:id", middleware.GinJWTAuth(), makeDeleteHandler(uc))
 }
 
-func makeCreateHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		uid, ok := middleware.GetUserID(r)
+func makeCreateHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
 		var req struct {
 			Name string `json:"name"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		id, err := uc.CreateStore(uid, req.Name)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{"id": id})
+		c.JSON(http.StatusOK, map[string]interface{}{"id": id})
 	}
 }
 
-func makeGetHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		uid, ok := middleware.GetUserID(r)
+func makeGetHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		role, _ := middleware.GetRole(r)
-		vars := mux.Vars(r)
-		idStr := vars["id"]
+		role, _ := middleware.GinGetRole(c)
+		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}
 		s, err := uc.GetStore(uid, id, role)
 		if err != nil {
 			if err.Error() == "forbidden" {
-				http.Error(w, err.Error(), http.StatusForbidden)
+				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			} else {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			}
 			return
 		}
 		if s == nil {
-			http.Error(w, "not found", http.StatusNotFound)
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		json.NewEncoder(w).Encode(s)
+		c.JSON(http.StatusOK, s)
 	}
 }
 
-func makeUpdateHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		uid, ok := middleware.GetUserID(r)
+func makeUpdateHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		role, _ := middleware.GetRole(r)
-		vars := mux.Vars(r)
-		idStr := vars["id"]
+		role, _ := middleware.GinGetRole(c)
+		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}
 		var req struct {
 			Name string `json:"name"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		if err := uc.UpdateStore(uid, id, role, req.Name); err != nil {
 			if err.Error() == "forbidden" {
-				http.Error(w, err.Error(), http.StatusForbidden)
+				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			} else if err.Error() == "not found" {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			} else {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			}
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		c.Status(http.StatusNoContent)
 	}
 }
 
-func makeDeleteHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		uid, ok := middleware.GetUserID(r)
+func makeDeleteHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		role, _ := middleware.GetRole(r)
-		vars := mux.Vars(r)
-		idStr := vars["id"]
+		role, _ := middleware.GinGetRole(c)
+		idStr := c.Param("id")
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 			return
 		}
 		if err := uc.DeleteStore(uid, id, role); err != nil {
 			if err.Error() == "forbidden" {
-				http.Error(w, err.Error(), http.StatusForbidden)
+				c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			} else if err.Error() == "not found" {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			} else {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			}
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		c.Status(http.StatusNoContent)
 	}
 }

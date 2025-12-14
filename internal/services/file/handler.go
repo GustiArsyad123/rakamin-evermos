@@ -1,41 +1,40 @@
 package file
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"database/sql"
 
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
+func RegisterRoutes(r *gin.Engine, dbConn *sql.DB) {
 	repo := NewRepo(dbConn)
 	uc := NewUsecase(repo)
-	r.Handle("/api/v1/files/upload", middleware.JWTAuth(makeUploadHandler(uc))).Methods("POST")
+	r.POST("/api/v1/files/upload", middleware.GinJWTAuth(), makeUploadHandler(uc))
 	// Serve uploaded files
-	r.PathPrefix("/uploads/").Handler(http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads/"))))
+	r.StaticFS("/uploads", http.Dir("uploads"))
 }
 
-func makeUploadHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func makeUploadHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		// Get user ID from JWT
-		uid, ok := middleware.GetUserID(r)
+		uid, ok := middleware.GinGetUserID(c)
 		if !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
 
 		// Parse multipart form (max 10MB)
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
-			http.Error(w, "invalid form data", http.StatusBadRequest)
+		if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid form data"})
 			return
 		}
 
-		file, header, err := r.FormFile("file")
+		file, header, err := c.Request.FormFile("file")
 		if err != nil {
-			http.Error(w, "no file provided", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no file provided"})
 			return
 		}
 		defer file.Close()
@@ -43,13 +42,12 @@ func makeUploadHandler(uc Usecase) http.HandlerFunc {
 		// Upload file
 		fileURL, err := uc.UploadFile(uid, file, header)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
 		// Return success response
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		c.JSON(http.StatusOK, map[string]interface{}{
 			"url":      fileURL,
 			"filename": header.Filename,
 			"size":     header.Size,

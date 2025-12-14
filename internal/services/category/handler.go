@@ -2,93 +2,89 @@ package category
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *mux.Router, dbConn *sql.DB) {
+func RegisterRoutes(r *gin.Engine, dbConn *sql.DB) {
 	repo := NewRepo(dbConn)
 	uc := NewUsecase(repo)
 
 	// Public: list and get
-	r.HandleFunc("/api/v1/categories", makeListHandler(uc)).Methods("GET")
-	r.HandleFunc("/api/v1/categories/{id}", makeGetHandler(uc)).Methods("GET")
+	r.GET("/api/v1/categories", makeListHandler(uc))
+	r.GET("/api/v1/categories/:id", makeGetHandler(uc))
 
 	// Admin-only management
-	r.Handle("/api/v1/categories", middleware.JWTAuth(middleware.RequireRole("admin")(makeCreateHandler(uc)))).Methods("POST")
-	r.Handle("/api/v1/categories/{id}", middleware.JWTAuth(middleware.RequireRole("admin")(makeUpdateHandler(uc)))).Methods("PUT")
-	r.Handle("/api/v1/categories/{id}", middleware.JWTAuth(middleware.RequireRole("admin")(makeDeleteHandler(uc)))).Methods("DELETE")
+	r.POST("/api/v1/categories", middleware.GinJWTAuth(), middleware.GinRequireRole("admin"), makeCreateHandler(uc))
+	r.PUT("/api/v1/categories/:id", middleware.GinJWTAuth(), middleware.GinRequireRole("admin"), makeUpdateHandler(uc))
+	r.DELETE("/api/v1/categories/:id", middleware.GinJWTAuth(), middleware.GinRequireRole("admin"), makeDeleteHandler(uc))
 }
 
-func makeCreateHandler(uc Usecase) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func makeCreateHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req struct {
 			Name string `json:"name"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		id, err := uc.Create(req.Name)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{"id": id})
-	})
+		c.JSON(http.StatusCreated, gin.H{"id": id})
+	}
 }
 
-func makeUpdateHandler(uc Usecase) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		id, _ := strconv.ParseInt(vars["id"], 10, 64)
+func makeUpdateHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 		var req struct {
 			Name string `json:"name"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
-			http.Error(w, "invalid body", http.StatusBadRequest)
+		if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 			return
 		}
 		if err := uc.Update(id, req.Name); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
-	})
+		c.Status(http.StatusNoContent)
+	}
 }
 
-func makeDeleteHandler(uc Usecase) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		id, _ := strconv.ParseInt(vars["id"], 10, 64)
+func makeDeleteHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err := uc.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
-	})
+		c.Status(http.StatusNoContent)
+	}
 }
 
-func makeListHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
+func makeListHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		filters := map[string]string{}
-		if v := q.Get("search"); v != "" {
+		if v := c.Query("search"); v != "" {
 			filters["search"] = v
 		}
 
 		page := 1
 		limit := 10
-		if v := q.Get("page"); v != "" {
+		if v := c.Query("page"); v != "" {
 			if pi, err := strconv.Atoi(v); err == nil && pi > 0 {
 				page = pi
 			}
 		}
-		if v := q.Get("limit"); v != "" {
+		if v := c.Query("limit"); v != "" {
 			if li, err := strconv.Atoi(v); err == nil && li > 0 {
 				limit = li
 			}
@@ -96,30 +92,29 @@ func makeListHandler(uc Usecase) http.HandlerFunc {
 
 		data, total, err := uc.List(filters, page, limit)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		resp := map[string]interface{}{
+		resp := gin.H{
 			"data":       data,
-			"pagination": map[string]interface{}{"page": page, "limit": limit, "total": total},
+			"pagination": gin.H{"page": page, "limit": limit, "total": total},
 		}
-		json.NewEncoder(w).Encode(resp)
+		c.JSON(http.StatusOK, resp)
 	}
 }
 
-func makeGetHandler(uc Usecase) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		id, _ := strconv.ParseInt(vars["id"], 10, 64)
-		c, err := uc.Get(id)
+func makeGetHandler(uc Usecase) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+		cat, err := uc.Get(id)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if c == nil {
-			http.Error(w, "not found", http.StatusNotFound)
+		if cat == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		json.NewEncoder(w).Encode(c)
+		c.JSON(http.StatusOK, cat)
 	}
 }
