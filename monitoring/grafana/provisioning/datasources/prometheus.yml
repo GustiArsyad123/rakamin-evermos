@@ -1,0 +1,17 @@
+# # Grafana Datasource Configuration for Prometheus
+# # This file configures Grafana to connect to Prometheus for metrics visualization
+# # Location: monitoring/grafana/provisioning/datasources/prometheus-datasource.yml
+
+# apiVersion: 1
+
+# datasources:
+#   - name: Prometheus
+#     type: prometheus
+#     access: proxy
+#     orgId: 1
+#     url: http://prometheus:9090
+#     isDefault: true
+#     editable: true
+#     version: 1
+#     # optional: allow Grafana UI to display datasource metadata
+#     allowUiMetadata: true

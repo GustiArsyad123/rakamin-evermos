@@ -39,6 +39,37 @@ Included:
 - **Kubernetes**: Production container orchestration with auto-scaling
 - **Nginx**: Reverse proxy, load balancing, and API gateway
 
+### Grafana provisioning note
+
+Grafana provisioning files for datasources live in `monitoring/grafana/provisioning/datasources`.
+
+- For provisioning Grafana with the Prometheus datasource, this repository uses the filename
+  `prometheus-datasource.yml` to avoid editor YAML-schema conflicts (some editors associate
+  the filename `prometheus.yml` with the Prometheus server config schema which does not
+  include a `datasources` key).
+
+- If you need a `prometheus.yml` filename for a specific deployment, you can recreate it
+  from the datasource file using the provided helper script: `scripts/restore-prometheus-yml.sh`.
+
+- If you prefer to keep using `prometheus.yml` in your editor without schema errors,
+  add the following VS Code setting (open `.vscode/settings.json`) to override YAML schema
+  association for that file path:
+
+```json
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/grafana/jsonnet-libs/master/prometheus/prometheus-datasource-schema.json": [
+      "monitoring/grafana/provisioning/datasources/prometheus.yml",
+      "monitoring/grafana/provisioning/datasources/prometheus-datasource.yml"
+    ]
+  }
+}
+```
+
+This maps a (datasource-compatible) schema to the provisioning file so editors won't
+flag `datasources` as invalid. Alternatively, disable schema validation for YAML in VS Code
+with `"yaml.validate": false` (not recommended globally).
+
 Run (development):
 
 1. Start MySQL with Docker Compose:

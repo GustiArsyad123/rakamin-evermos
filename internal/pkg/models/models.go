@@ -38,13 +38,15 @@ type Category struct {
 }
 
 type Transaction struct {
-	ID        int64     `json:"id"`
-	UserID    int64     `json:"user_id"`
-	StoreID   int64     `json:"store_id"`
-	AddressID int64     `json:"address_id"`
-	Total     float64   `json:"total"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              int64     `json:"id"`
+	UserID          int64     `json:"user_id"`
+	StoreID         int64     `json:"store_id"`
+	AddressID       int64     `json:"address_id"`
+	Total           float64   `json:"total"`
+	Status          string    `json:"status"`
+	ProviderTxnID   string    `json:"provider_txn_id,omitempty"`
+	PaymentMetadata string    `json:"payment_metadata,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type ProductLog struct {

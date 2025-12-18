@@ -64,8 +64,8 @@ func (r *mysqlRepo) Create(txn *models.Transaction, logs []*models.ProductLog) (
 
 func (r *mysqlRepo) GetByID(id int64) (*models.Transaction, []*models.ProductLog, error) {
 	t := &models.Transaction{}
-	row := r.db.QueryRow("SELECT id,user_id,store_id,address_id,total,status,created_at FROM transactions WHERE id = ?", id)
-	if err := row.Scan(&t.ID, &t.UserID, &t.StoreID, &t.AddressID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
+	row := r.db.QueryRow("SELECT id,user_id,store_id,address_id,total,status,provider_txn_id,payment_metadata,created_at FROM transactions WHERE id = ?", id)
+	if err := row.Scan(&t.ID, &t.UserID, &t.StoreID, &t.AddressID, &t.Total, &t.Status, &t.ProviderTxnID, &t.PaymentMetadata, &t.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil, nil
 		}
@@ -132,7 +132,7 @@ func (r *mysqlRepo) ListByUser(userID int64, filters map[string]string, page, li
 	}
 	offset := (page - 1) * limit
 
-	listQuery := fmt.Sprintf("SELECT id,user_id,store_id,address_id,total,status,created_at FROM transactions%s ORDER BY created_at DESC LIMIT ? OFFSET ?", whereClause)
+	listQuery := fmt.Sprintf("SELECT id,user_id,store_id,address_id,total,status,provider_txn_id,payment_metadata,created_at FROM transactions%s ORDER BY created_at DESC LIMIT ? OFFSET ?", whereClause)
 	args = append(args, limit, offset)
 
 	rows, err := r.db.Query(listQuery, args...)
@@ -143,7 +143,7 @@ func (r *mysqlRepo) ListByUser(userID int64, filters map[string]string, page, li
 	out := []*models.Transaction{}
 	for rows.Next() {
 		t := &models.Transaction{}
-		if err := rows.Scan(&t.ID, &t.UserID, &t.StoreID, &t.AddressID, &t.Total, &t.Status, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.UserID, &t.StoreID, &t.AddressID, &t.Total, &t.Status, &t.ProviderTxnID, &t.PaymentMetadata, &t.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, t)

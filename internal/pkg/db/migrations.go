@@ -20,3 +20,12 @@ func EnsureAuthTables(db *sql.DB) error {
 	_, err := db.Exec(q)
 	return err
 }
+
+// EnsurePaymentColumns ensures transactions table has columns for provider txn id and metadata.
+func EnsurePaymentColumns(db *sql.DB) error {
+	const q = `ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS provider_txn_id VARCHAR(255) NULL,
+  ADD COLUMN IF NOT EXISTS payment_metadata TEXT NULL;`
+	_, err := db.Exec(q)
+	return err
+}

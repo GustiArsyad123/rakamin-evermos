@@ -8,12 +8,14 @@ import (
 	"database/sql"
 
 	"github.com/example/ms-ecommerce/internal/pkg/middleware"
+	"github.com/example/ms-ecommerce/internal/pkg/payment"
 	"github.com/gin-gonic/gin"
 )
 
 func RegisterRoutes(r *gin.Engine, dbConn *sql.DB) {
 	repo := NewRepo(dbConn)
-	uc := NewUsecase(repo, dbConn)
+	provider := payment.NewProviderFromEnv()
+	uc := NewUsecase(repo, dbConn, provider)
 	// transactions require auth
 	r.POST("/api/v1/transactions", middleware.GinJWTAuth(), makeCreateHandler(uc))
 	r.GET("/api/v1/transactions", middleware.GinJWTAuth(), makeListHandler(uc))
@@ -31,8 +33,10 @@ func makeCreateHandler(uc Usecase) gin.HandlerFunc {
 			return
 		}
 		var req struct {
-			AddressID int64     `json:"address_id"`
-			Items     []ItemReq `json:"items"`
+			AddressID     int64     `json:"address_id"`
+			Items         []ItemReq `json:"items"`
+			PaymentMethod string    `json:"payment_method"` // e.g. "card" or provider-specific
+			PaymentToken  string    `json:"payment_token"`  // token / nonce from frontend
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid"})
@@ -42,7 +46,14 @@ func makeCreateHandler(uc Usecase) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "address_id is required"})
 			return
 		}
-		id, err := uc.Create(uid, req.AddressID, req.Items)
+		// If payment details provided, attempt to create and charge
+		var id int64
+		var err error
+		if req.PaymentToken != "" {
+			id, err = uc.CreateAndCharge(uid, req.AddressID, req.Items, req.PaymentMethod, req.PaymentToken)
+		} else {
+			id, err = uc.Create(uid, req.AddressID, req.Items)
+		}
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return

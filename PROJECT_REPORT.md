@@ -418,6 +418,51 @@ Proyek **Go Microservices E-commerce** ini merupakan contoh implementasi terbaik
 🔮 **Multi-region Deployment**  
 🔮 **AI-powered Recommendations**
 
+## 🔌 Payment Gateway Integration (Implemented: skeleton)
+
+This project now includes a minimal, pluggable payment gateway integration to demonstrate how transactions
+can be charged via a provider. The integration is intentionally lightweight and designed for local development
+and testing; it uses a `MockProvider` by default and provides clear extension points for real providers
+such as Stripe, Midtrans, or others.
+
+Where to find it:
+
+- `internal/pkg/payment` — the `PaymentProvider` interface and a `MockProvider` stub
+- `internal/services/transaction/usecase.go` — new `CreateAndCharge` method which creates a transaction
+  and attempts to charge the configured provider; updates transaction `status` to `paid` or `failed`
+- `internal/services/transaction/handler.go` — the `POST /api/v1/transactions` endpoint accepts optional
+  `payment_method` and `payment_token` in the JSON payload; when present the endpoint will call `CreateAndCharge`
+
+How it works (developer notes):
+
+1. Frontend collects payment token/nonce (from Stripe/Midtrans SDK) and submits it with the order payload.
+2. The transaction usecase validates items, creates the transaction (stock updated), and calls the payment provider.
+3. On success the transaction is marked `paid`; on failure it's marked `failed` (stock already reserved/updated —
+   consider implementing compensation in production).
+
+Security & Production
+
+- The current code uses a `MockProvider` for development. Replace with a production provider implementation
+  (e.g. `payment/stripe.go`) that performs server-side API calls to the provider using secure API keys stored in
+  environment variables or secret manager.
+- Record provider transaction IDs and payment metadata to the database in production for reconciliation and refunds.
+
+Example request (create and charge):
+
+```http
+POST /api/v1/transactions
+Content-Type: application/json
+
+{
+  "address_id": 12,
+  "items": [{"product_id": 1, "quantity": 2}],
+  "payment_method": "card",
+  "payment_token": "tok_test_abc123"
+}
+```
+
+The endpoint returns the created transaction id and will set transaction `status` accordingly.
+
 Proyek ini tidak hanya berfungsi sebagai platform e-commerce, tetapi juga sebagai **learning platform** bagi developer yang ingin memahami arsitektur microservices modern dengan Go. Dengan dokumentasi yang komprehensif dan code quality yang tinggi, proyek ini siap untuk diadopsi dan dikembangkan lebih lanjut.
 
 ---
